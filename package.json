@@ -1,0 +1,16 @@
+{
+  "name": "orlo-agent-sdk-repository",
+  "private": true,
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/typescript"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@orlo/agent-sdk",
+    "test": "npm test --workspace=@orlo/agent-sdk",
+    "typecheck": "npm run typecheck --workspace=@orlo/agent-sdk"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

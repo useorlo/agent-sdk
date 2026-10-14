@@ -1,0 +1,41 @@
+{
+  "name": "@orlo/agent-sdk",
+  "version": "0.0.1",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "orlo-skills": "dist/skills-cli.js",
+    "orlo-agent-check": "dist/check-cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "Apache-2.0",
+  "description": "Orlo agent runtime SDK, shared skills client, and connection check",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/useorlo/agent-sdk.git",
+    "directory": "packages/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/useorlo/agent-sdk/issues"
+  },
+  "homepage": "https://docs.useorlo.com",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orlo-langgraph"
+version = "0.1.0"
+description = "LangGraph Python adapter for Orlo agent governance"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Orlo" }
+]
+dependencies = []
+keywords = ["orlo", "langgraph", "langchain", "agent", "governance"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/useorlo/agent-sdk"
+Issues = "https://github.com/useorlo/agent-sdk/issues"
+Documentation = "https://docs.useorlo.com"
+
+[project.optional-dependencies]
+langgraph = [
+  "langchain-core>=0.3.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
