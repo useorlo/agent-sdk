@@ -19,7 +19,7 @@ It wraps the raw HTTP API with:
 Requires Node.js 20 or later. Install the published package:
 
 ```sh
-npm install @orlo/agent-sdk@0.0.1
+npm install @orlo/agent-sdk@0.0.2
 ```
 
 Open **Connect your agent → Run the connection check** in the Orlo console for your environment values and permissions. The console also offers a matching versioned SDK download; neither installation path needs an Orlo checkout.

@@ -8,7 +8,7 @@ Connect tools in your application to Orlo. A wrapper asks Orlo for a decision be
 Install the TypeScript SDK from [npm](https://www.npmjs.com/package/@orlo/agent-sdk):
 
 ```sh
-npm install @orlo/agent-sdk@0.0.1
+npm install @orlo/agent-sdk@0.0.2
 ```
 
 Start with **Connect your agent** in your Orlo console. Set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. The console also offers matching versioned downloads. Python is not yet published on PyPI; use its console download or build from source.

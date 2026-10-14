@@ -17,3 +17,9 @@ After the first package exists, configure its npm trusted publisher with GitHub 
 Update the package version and lockfile together, document changes, and run the compatibility workflow before publishing. The npm job does not publish Python packages. Keep private platform dependencies pinned and verify protocol compatibility when updating them.
 
 See [npm publication scanning](https://github.blog/changelog/2026-07-28-npm-publish-time-malware-scanning-and-dual-use-metadata/), [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and [granular tokens](https://docs.npmjs.com/creating-and-viewing-access-tokens/).
+
+## Public archives for console downloads
+
+After npm installation verification passes, the workflow packages the Python source from the same public commit, installs and tests that archive, and creates a GitHub release with both archives and SHA-256 checksums. GitHub attestations bind the archives to this public workflow. The TypeScript archive is fetched from npm unchanged. Python is not published to PyPI by this job. Action dependencies are pinned to commit SHAs.
+
+If the archive job fails after npm publication, rerun only that failed job; do not republish npm. Console builds must pin the verified archive URLs and hashes and copy their bytes unchanged. They must not generate a different archive under the same release version.

@@ -7,7 +7,7 @@ on:
         description: Exact package version to publish
         required: true
         type: string
-        default: '0.0.1'
+        default: '0.0.2'
       verify_only:
         description: Verify an existing release without publishing again
         required: true
@@ -33,8 +33,8 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
@@ -86,3 +86,42 @@ jobs:
           node -e "const sdk=require('@orlo/agent-sdk'); if(typeof sdk.OrloAgentClient!=='function'||typeof sdk.createGenericRuntimeAdapter!=='function') throw new Error('Missing public SDK exports');"
           npx --no-install orlo-agent-check --help
           npx --no-install orlo-skills --help
+  release-artifacts:
+    needs: publish
+    if: ${{ !inputs.verify_only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Build and inspect public release archives
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          mkdir artifacts
+          npm pack "@orlo/agent-sdk@$RELEASE_VERSION" --pack-destination artifacts
+          python -m pip install 'build==1.3.0' 'langchain-core==1.6.10' 'langgraph==1.2.15'
+          python -m build --sdist --outdir artifacts packages/python
+          python -m pip install artifacts/orlo_langgraph-*.tar.gz
+          python -B -m unittest discover -s packages/python/tests -v
+          python -m orlo_langgraph.check --help
+          node -e "const fs=require('node:fs'),crypto=require('node:crypto'); const rows=fs.readdirSync('artifacts').sort().map(name=>crypto.createHash('sha256').update(fs.readFileSync('artifacts/'+name)).digest('hex')+'  '+name);fs.writeFileSync('artifacts/SHA256SUMS',rows.join('\n')+'\n');"
+      - name: Attest release archives and checksums
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: artifacts/*
+      - name: Publish release archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$RELEASE_VERSION" artifacts/* --target "$GITHUB_SHA" --title "Agent SDK $RELEASE_VERSION" --notes-file RELEASE-NOTES.md
