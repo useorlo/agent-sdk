@@ -61,6 +61,6 @@ jobs:
           cd "$verify_dir"
           npm init -y
           npm install --ignore-scripts "@orlo/agent-sdk@$RELEASE_VERSION"
-          node -e "const sdk=require('@orlo/agent-sdk'); if(typeof sdk.AgentSession!=='function') throw new Error('Missing AgentSession export');"
+          node -e "const sdk=require('@orlo/agent-sdk'); if(typeof sdk.OrloAgentClient!=='function'||typeof sdk.createGenericRuntimeAdapter!=='function') throw new Error('Missing public SDK exports');"
           npx --no-install orlo-agent-check --help
           npx --no-install orlo-skills --help
