@@ -6,7 +6,7 @@ The `Publish npm SDK` workflow builds and tests the exact version in `packages/t
 
 1. Add a short-lived npm granular token as the repository Actions secret `NPM_TOKEN`. Allow package read/write (publish and stage) for the `@orlo` scope and enable bypass 2FA for automated publication. Organization-management permissions are not needed. Never commit the token or paste it in an issue.
 2. Run `publish-npm.yml` on `main`, specifying the package version and `bootstrap-token` authentication.
-3. Check the workflow's registry-install verification and the npm package page. If publication succeeds but verification fails, verify the existing version before retrying; npm does not permit replacing a published version.
+3. Check the workflow's registry-install verification and the npm package page. First publications can take several minutes to reach the public registry; the verification step waits up to five minutes. If publication succeeds but verification fails, rerun with `verify_only: true` to check the existing version without publishing again. npm does not permit replacing a published version.
 
 ## Later releases
 

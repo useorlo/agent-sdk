@@ -8,6 +8,11 @@ on:
         required: true
         type: string
         default: '0.0.1'
+      verify_only:
+        description: Verify an existing release without publishing again
+        required: true
+        type: boolean
+        default: false
       authentication:
         description: Use the bootstrap token only until npm trusted publishing is configured
         required: true
@@ -44,6 +49,7 @@ jobs:
       - run: npm run typecheck
       - run: npm pack --workspace=@orlo/agent-sdk --dry-run
       - name: Publish with provenance
+        if: ${{ !inputs.verify_only }}
         env:
           NODE_AUTH_TOKEN: ${{ inputs.authentication == 'bootstrap-token' && secrets.NPM_TOKEN || '' }}
           RELEASE_AUTHENTICATION: ${{ inputs.authentication }}
@@ -56,7 +62,22 @@ jobs:
       - name: Verify installation from npm
         env:
           RELEASE_VERSION: ${{ inputs.version }}
+          NPM_CONFIG_USERCONFIG: /dev/null
         run: |
+          # First publications can take several minutes to reach the public registry.
+          available=false
+          for attempt in $(seq 1 30); do
+            if npm view "@orlo/agent-sdk@$RELEASE_VERSION" version --json --prefer-online | node -e "let input=''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => { try { process.exit(JSON.parse(input) === process.env.RELEASE_VERSION ? 0 : 1); } catch { process.exit(1); } });"; then
+              available=true
+              break
+            fi
+            echo "Waiting for the public registry ($attempt/30)..."
+            sleep 10
+          done
+          if [ "$available" != true ]; then
+            echo 'Registry verification timed out. Use verify_only to check this version again without republishing.' >&2
+            exit 1
+          fi
           verify_dir=$(mktemp -d)
           cd "$verify_dir"
           npm init -y
