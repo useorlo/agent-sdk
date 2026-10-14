@@ -60,19 +60,20 @@ jobs:
           fi
           npm publish --workspace=@orlo/agent-sdk --access public --provenance
       - name: Verify installation from npm
+        timeout-minutes: 20
         env:
           RELEASE_VERSION: ${{ inputs.version }}
           NPM_CONFIG_USERCONFIG: /dev/null
         run: |
-          # First publications can take several minutes to reach the public registry.
+          # npm scans new publications before they become installable.
           available=false
-          for attempt in $(seq 1 30); do
-            if npm view "@orlo/agent-sdk@$RELEASE_VERSION" version --json --prefer-online | node -e "let input=''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => { try { process.exit(JSON.parse(input) === process.env.RELEASE_VERSION ? 0 : 1); } catch { process.exit(1); } });"; then
+          for attempt in $(seq 1 60); do
+            if npm view "@orlo/agent-sdk@$RELEASE_VERSION" version --json --prefer-online --fetch-retries=0 --fetch-timeout=10000 | node -e "let input=''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => { try { process.exit(JSON.parse(input) === process.env.RELEASE_VERSION ? 0 : 1); } catch { process.exit(1); } });"; then
               available=true
               break
             fi
-            echo "Waiting for the public registry ($attempt/30)..."
-            sleep 10
+            echo "Waiting for the public registry ($attempt/60)..."
+            sleep 15
           done
           if [ "$available" != true ]; then
             echo 'Registry verification timed out. Use verify_only to check this version again without republishing.' >&2
