@@ -13,8 +13,8 @@ from uuid import UUID, uuid4
 from .client import OrloLangGraphClient
 from .exceptions import OrloSessionError
 
-# Reads keep working through an Orlo outage; writes, deletes, network calls, and anything unknown stop.
-DEFAULT_FAIL_MODE: Mapping[str, str] = {"read": "open", "default": "closed"}
+# All tool calls stop during an outage unless the application explicitly opts in for an action class.
+DEFAULT_FAIL_MODE: Mapping[str, str] = {"default": "closed"}
 
 
 @dataclass
@@ -26,7 +26,7 @@ class OrloLangGraphSession:
     risk_tier: str | None = None
     autonomy_level: str = "assisted"
     metadata: Mapping[str, Any] | None = None
-    # What a tool call does when Orlo can't be reached: "open" runs it and records it later, "closed"
+    # What a tool call does when Orlo can't be reached: "open" runs it and attempts background reporting, "closed"
     # blocks it. Keyed by action class, with "default" for the rest. Merged over DEFAULT_FAIL_MODE.
     fail_mode: Mapping[str, str] | None = None
 

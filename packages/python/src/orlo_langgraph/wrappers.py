@@ -206,7 +206,7 @@ def govern_tool(
             except OrloUnavailableError as exc:
                 if self_session.fail_mode_for(action_class) != "open":
                     raise
-                # Fail open: the call runs now, and the step is recorded as soon as Orlo answers again.
+                # Explicit fail-open: reporting has bounded retries, not a persistent replay queue.
                 failed_open = True
                 pre = {
                     "decision": "allow",

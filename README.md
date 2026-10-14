@@ -37,7 +37,7 @@ python -B -m unittest discover -s packages/python/tests -v
 
 The TypeScript function wrapper and Python LangChain/LangGraph integration are public SDK code. Orlo’s API, workers, database, and internal model-provider adapters are maintained separately.
 
-SDK wrappers stop denied calls only when the application uses them around the actual implementation. Callbacks provide trace evidence; they do not prevent unwrapped tool execution. By default read actions may continue during an Orlo outage; the connection check sets every action to stop. Choose and document the outage behavior for your application.
+SDK wrappers stop denied calls only when the application uses them around the actual implementation. Callbacks provide trace evidence; they do not prevent unwrapped tool execution. All tool actions stop by default when Orlo is unavailable. An application can explicitly allow an action class to continue, accepting the permission and reporting gap. Choose and document the outage behavior for your application.
 
 Shared skill retrieval grants no tool permission. Approval retries must use the original step ID and arguments. Finish each run so its background reports are delivered, and check the unsent-report count when delivery matters.
 

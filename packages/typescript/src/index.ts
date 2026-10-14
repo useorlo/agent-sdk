@@ -324,13 +324,13 @@ export interface StartAgentRunInput extends CreateAgentSessionRequest {}
 export type FailMode = 'open' | 'closed';
 
 /**
- * What a tool call does when Orlo can't be reached: 'open' lets it run and records it later,
+ * What a tool call does when Orlo can't be reached: 'open' lets it run and attempts background reporting,
  * 'closed' blocks it. Keyed by action class, with `default` for the rest.
  */
 export type FailModeConfig = Partial<Record<AgentActionClass | 'default', FailMode>>;
 
-/** Reads keep working through an Orlo outage; writes, deletes, network calls, and anything unknown stop. */
-export const DEFAULT_FAIL_MODE: FailModeConfig = { read: 'open', default: 'closed' };
+/** Every tool call stops during an Orlo outage unless its action class explicitly opts in. */
+export const DEFAULT_FAIL_MODE: Readonly<FailModeConfig> = Object.freeze({ default: 'closed' });
 
 export interface AgentRunOptions {
   failMode?: FailModeConfig;
@@ -339,7 +339,7 @@ export interface AgentRunOptions {
 export interface BeforeToolCallResult {
   governance: GovernAgentStepResponse;
   approval: AgentApproval | null;
-  /** True when Orlo couldn't be reached and the action class fails open. The step is recorded later. */
+  /** True when Orlo couldn't be reached and the action class fails open. Background reporting is attempted; delivery is not guaranteed. */
   failedOpen?: boolean;
 }
 
@@ -539,7 +539,7 @@ export class OrloAgentRun {
       if (!(err instanceof OrloUnavailableError) || this.failModeFor(toolCheck.action_class) !== 'open') {
         throw err;
       }
-      // Fail open: the call runs now, and the step is recorded as soon as Orlo answers again.
+      // Explicit fail-open: attempt reporting with bounded retries; there is no persistent replay queue.
       this.track(this.client.importTrace(this.sessionId, {
         steps: [{
           ...request,

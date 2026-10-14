@@ -118,11 +118,17 @@ On that retry Orlo:
 
 `OrloLangGraphClient` gives each attempt `timeout_seconds` (default 3.0) and retries once (`retries`, default 1) after a timeout, a network error, or a 5xx. Every write carries an `Idempotency-Key` that stays the same across its retries, so the API replays its first answer instead of recording the step twice. After `failure_threshold` consecutive failures (default 5) the client stops calling Orlo for `cooldown_seconds` (default 30) and raises `OrloUnavailableError`, a subclass of `OrloSessionError`.
 
-When a tool check can't reach Orlo, the session's `fail_mode` for that action class decides. The default is `{"read": "open", "default": "closed"}`:
+When a tool check can't reach Orlo, the session's `fail_mode` for that action class decides. The default is `{"default": "closed"}`: every tool action stops. To deliberately allow reads during an outage, set `fail_mode={"read": "open", "default": "closed"}`. A read can disclose sensitive data; its action class is supplied by your application.
 
-- `"open"`: the tool runs, and the step is imported with `metadata.fail_open` once Orlo answers again.
+- `"open"`: the tool runs, and background reporting is attempted with `metadata.fail_open`. Delivery is not guaranteed.
 - `"closed"`: `OrloUnavailableError` is raised and the tool doesn't run.
 
 ## Steps the wrapper doesn't wait for
 
 When a session starts, Orlo returns `blocking_step_types`. `govern_tool` and `GovernedChatModel` wait only on those, and send other steps in the background. Orlo still records and checks them. `session.close()` waits for background steps first. Sync tools and `GovernedChatModel.invoke` send theirs before their event loop closes. `session.unsent_steps` counts steps that couldn't be sent even after retries. A server that doesn't return `blocking_step_types` gets the old behaviour: every step blocks.
+
+## Reporting guarantees
+
+Background reports use bounded retries in memory. There is no durable outbox or automatic replay after recovery. Closing or flushing waits for those attempts; it does not recover lost reports. Inspect `session.unsent_steps` before declaring evidence complete. Process termination can lose reports without leaving a count. If delivery must survive an outage or restart, the application needs its own persistent reporting mechanism.
+
+The default changed from allowing reads during an outage to stopping all tool calls. Existing applications that require the old behavior must opt in explicitly.

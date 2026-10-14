@@ -169,12 +169,14 @@ When a tool check can't reach Orlo, the run's fail mode for that action class de
 
 ```ts
 const run = await OrloAgentRun.start(client, { task_id }, {
-  failMode: { read: 'open', default: 'closed' }, // the default
+  failMode: { default: 'closed' }, // all actions stop by default
 });
 ```
 
-- `open`: the call runs, `beforeToolCall` returns `failedOpen: true`, and the step is imported with `metadata.fail_open` once Orlo answers again.
+- `open`: the call runs, `beforeToolCall` returns `failedOpen: true`, and background reporting is attempted with `metadata.fail_open`. Delivery is not guaranteed.
 - `closed`: `OrloUnavailableError` is thrown and the tool doesn't run.
+
+To deliberately allow reads during an outage, set `failMode: { read: 'open', default: 'closed' }`. A read can disclose sensitive data; its action class is supplied by your application.
 
 ## Steps the SDK doesn't wait for
 
@@ -187,3 +189,9 @@ When a session starts, Orlo returns `blocking_step_types`: the steps whose answe
 `promoteTraceSampleToDataset(traceSampleId, datasetId)` treats `datasetId` as the latest baseline. It creates a new version containing the baseline examples plus the saved step. Use `result.dataset.id` for the next comparison; the supplied dataset remains unchanged. A stale baseline returns `DATASET_BASE_CHANGED` (409). Refresh the examples and review the new baseline before retrying.
 
 Repeated promotion of the same step returns `already_added: true` and the version where it was first added, with `dataset_sample_id: null`. This also applies when two saved samples refer to the same run step.
+
+## Reporting guarantees
+
+Background reports use bounded retries in memory. There is no durable outbox or automatic replay after recovery. Closing or flushing waits for those attempts; it does not recover lost reports. Inspect `run.unsentSteps` before declaring evidence complete. Process termination can lose reports without leaving a count. If delivery must survive an outage or restart, the application needs its own persistent reporting mechanism.
+
+The default changed from allowing reads during an outage to stopping all tool calls. Existing applications that require the old behavior must opt in explicitly.

@@ -10,6 +10,7 @@ import {
   OrloApiError,
   OrloUnavailableError,
   createGenericRuntimeAdapter,
+  type FailModeConfig,
 } from './index.js';
 
 function sessionJson(blockingStepTypes?: string[]) {
@@ -133,15 +134,15 @@ describe('transport resilience', () => {
 });
 
 describe('fail modes and background steps', () => {
-  async function startRun(fetchMock: ReturnType<typeof vi.fn>, blockingStepTypes?: string[]) {
+  async function startRun(fetchMock: ReturnType<typeof vi.fn>, blockingStepTypes?: string[], failMode?: FailModeConfig) {
     fetchMock.mockResolvedValueOnce(json(sessionJson(blockingStepTypes), 201));
     const client = new OrloAgentClient({ baseUrl: 'https://orlo.test', orgId: 'org-1', fetch: fetchMock as never, retries: 0 });
-    return OrloAgentRun.start(client, { task_id: 'task-1' });
+    return OrloAgentRun.start(client, { task_id: 'task-1' }, { failMode });
   }
 
-  it('lets a read run when Orlo is unreachable and records it later', async () => {
+  it('allows explicitly opted-in reads but counts reports lost during an outage', async () => {
     const fetchMock = vi.fn();
-    const run = await startRun(fetchMock);
+    const run = await startRun(fetchMock, undefined, { read: 'open' });
     fetchMock.mockRejectedValue(new TypeError('fetch failed'));
     const adapter = createGenericRuntimeAdapter({ run });
     const execute = vi.fn(async () => ({ status: 'shipped' }));
@@ -154,17 +155,35 @@ describe('fail modes and background steps', () => {
     await run.flush();
     const importCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/traces/import'));
     expect(importCall).toBeTruthy();
+    expect(run.unsentSteps).toBe(2);
+    fetchMock.mockClear().mockResolvedValue(json(sessionJson().session));
+    await run.complete();
+    expect(fetchMock.mock.calls).toHaveLength(1); // Completion does not replay lost reports.
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('PATCH');
+    expect(run.unsentSteps).toBe(2);
   });
 
-  it('blocks a write when Orlo is unreachable', async () => {
+  it.each(['read', 'write', 'delete', 'network', 'control', undefined] as const)('blocks %s tools by default during an outage', async (actionClass) => {
     const fetchMock = vi.fn();
     const run = await startRun(fetchMock);
     fetchMock.mockRejectedValue(new TypeError('fetch failed'));
     const adapter = createGenericRuntimeAdapter({ run });
     const execute = vi.fn(async () => ({ refunded: true }));
 
-    await expect(adapter.runToolStep({ stepId: 'step-write', toolName: 'issue_refund', arguments: { amount: 10 }, actionClass: 'write', execute }))
+    await expect(adapter.runToolStep({ stepId: 'step-write', toolName: 'issue_refund', arguments: { amount: 10 }, actionClass, execute }))
       .rejects.toBeInstanceOf(OrloUnavailableError);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+
+  it('does not treat an authentication failure as permission to run an opted-in read', async () => {
+    const fetchMock = vi.fn();
+    const run = await startRun(fetchMock, undefined, { read: 'open' });
+    fetchMock.mockResolvedValue(json({ error: 'UNAUTHORIZED' }, 401));
+    const execute = vi.fn(async () => ({}));
+    await expect(createGenericRuntimeAdapter({ run }).runToolStep({
+      stepId: 'denied', toolName: 'read_document', actionClass: 'read', arguments: {}, execute,
+    })).rejects.toBeInstanceOf(OrloApiError);
     expect(execute).not.toHaveBeenCalled();
   });
 

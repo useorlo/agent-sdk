@@ -78,14 +78,14 @@ class ClientResilienceTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WrapperResilienceTests(unittest.IsolatedAsyncioTestCase):
-    async def start(self, transport: ScriptedTransport) -> OrloLangGraphSession:
-        session = OrloLangGraphSession(orlo_client=make_client(transport, retries=0), task_id="task-1")
+    async def start(self, transport: ScriptedTransport, fail_mode=None) -> OrloLangGraphSession:
+        session = OrloLangGraphSession(orlo_client=make_client(transport, retries=0), task_id="task-1", fail_mode=fail_mode)
         await session.__aenter__()
         return session
 
-    async def test_a_read_runs_when_orlo_is_down_and_is_recorded_later(self):
+    async def test_an_opted_in_read_runs_but_lost_reports_are_not_replayed(self):
         transport = ScriptedTransport()
-        session = await self.start(transport)
+        session = await self.start(transport, {"read": "open"})
 
         @govern_tool(session=session, tool_name="lookup_order", action_class="read")
         async def lookup_order(order_id: str) -> str:
@@ -93,27 +93,35 @@ class WrapperResilienceTests(unittest.IsolatedAsyncioTestCase):
 
         transport.down = True
         self.assertEqual(await lookup_order("10482"), "order 10482")
-        transport.down = False
         await session.flush()
+        self.assertEqual(session.unsent_steps, 2)
+        transport.down = False
+        request_count = len(transport.requests)
+        await session.close()
+        self.assertEqual(len(transport.requests), request_count + 1)
+        self.assertEqual(transport.requests[-1][0], "PATCH")
+        self.assertEqual(session.unsent_steps, 2)
         imported = transport.calls_to("/traces/import")
         self.assertTrue(imported)
         self.assertEqual(imported[0][3]["steps"][0]["decision"], "allow")
         self.assertTrue(imported[0][3]["steps"][0]["metadata"]["fail_open"])
 
-    async def test_a_write_is_blocked_when_orlo_is_down(self):
-        transport = ScriptedTransport()
-        session = await self.start(transport)
-        ran: list[str] = []
+    async def test_all_action_classes_stop_by_default_during_an_outage(self):
+        for action_class in ["read", "write", "delete", "network", "control", None]:
+            with self.subTest(action_class=action_class):
+                transport = ScriptedTransport()
+                session = await self.start(transport)
+                ran: list[str] = []
 
-        @govern_tool(session=session, tool_name="issue_refund", action_class="write")
-        async def issue_refund(order_id: str) -> str:
-            ran.append(order_id)
-            return order_id
+                @govern_tool(session=session, tool_name="example_tool", action_class=action_class)
+                async def example_tool(value: str) -> str:
+                    ran.append(value)
+                    return value
 
-        transport.down = True
-        with self.assertRaises(OrloUnavailableError):
-            await issue_refund("10482")
-        self.assertEqual(ran, [])
+                transport.down = True
+                with self.assertRaises(OrloUnavailableError):
+                    await example_tool("10482")
+                self.assertEqual(ran, [])
 
     async def test_non_blocking_results_are_sent_in_the_background(self):
         transport = ScriptedTransport(blocking_step_types=["tool_request", "retrieval"])
@@ -132,7 +140,7 @@ class WrapperResilienceTests(unittest.IsolatedAsyncioTestCase):
     async def test_every_step_blocks_when_the_server_does_not_say(self):
         session = await self.start(ScriptedTransport())
         self.assertTrue(session.is_blocking("model_call"))
-        self.assertEqual(session.fail_mode_for("read"), "open")
+        self.assertEqual(session.fail_mode_for("read"), "closed")
         self.assertEqual(session.fail_mode_for("delete"), "closed")
 
 
