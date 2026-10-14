@@ -5,7 +5,13 @@ Connect tools in your application to Orlo. A wrapper asks Orlo for a decision be
 - [TypeScript SDK](packages/typescript/README.md): ordinary async functions, typed API client, shared skills, and a connection-check command.
 - [Python SDK](packages/python/README.md): ordinary Python tools plus LangChain and LangGraph integration.
 
-Start with **Connect your agent** in your Orlo console. Install the versioned download, set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. npm and PyPI packages have not been published yet. Use the console downloads or build from source.
+Install the TypeScript SDK from [npm](https://www.npmjs.com/package/@orlo/agent-sdk):
+
+```sh
+npm install @orlo/agent-sdk@0.0.1
+```
+
+Start with **Connect your agent** in your Orlo console. Set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. The console also offers matching versioned downloads. Python is not yet published on PyPI; use its console download or build from source.
 
 ## Development
 
@@ -39,6 +45,6 @@ Shared skill retrieval grants no tool permission. Approval retries must use the 
 
 SDK changes are maintained here. TypeScript and Python have separate versions and release schedules. The private Orlo platform currently builds matching workspace copies for its console downloads; migration to pinned package releases follows registry publication. New optional API fields must remain backward compatible; breaking protocol changes require a versioned migration and matching server contract tests. Do not regenerate this checkout from the private monorepo after contributors start working here.
 
-Before the first registry release, configure protected publication and provenance, publish the reviewed packages, then test a registry install and update the installation instructions. CI builds and packs but does not publish.
+TypeScript version `0.0.1` is published with provenance. The [registry verification](https://github.com/useorlo/agent-sdk/actions/runs/38599129445) installed it without a token and checked both commands. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
 
 Apache-2.0. See [LICENSE](LICENSE).

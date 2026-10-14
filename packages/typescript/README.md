@@ -16,7 +16,13 @@ It wraps the raw HTTP API with:
 
 ## Install and check the connection
 
-Open **Connect your agent → Run the connection check** in the Orlo console. Copy its versioned SDK download and installation command. The download is self-contained; it needs no Orlo checkout. Requires Node.js 20 or later.
+Requires Node.js 20 or later. Install the published package:
+
+```sh
+npm install @orlo/agent-sdk@0.0.1
+```
+
+Open **Connect your agent → Run the connection check** in the Orlo console for your environment values and permissions. The console also offers a matching versioned SDK download; neither installation path needs an Orlo checkout.
 
 Set `ORLO_API_URL` (gateway), `ORLO_ORG_ID`, `ORLO_TASK_ID`, `ORLO_CONSOLE_URL`, and `ORLO_API_KEY` using the values shown there. The key needs `agent_governance.run` and `agent_governance.read`.
 
@@ -26,7 +32,7 @@ npx --no-install orlo-agent-check --expect blocked
 
 The check wraps a harmless local tool named `orlo_setup_check`. It makes no model call and changes no permissions. Set that tool's permission explicitly in the console, then repeat with `--expect allowed`. Inherited restrictions still apply. The command prints links to the exact run and its verification page. Missing reports, a rejected key, an unreachable gateway, or an unexpected decision return a nonzero exit code. Every action stops if Orlo is unreachable.
 
-The package is not yet published on npm. Do not substitute a registry installation command for the console download. For development in this repository, build `@orlo/agent-sdk` with npm workspaces. The SDK has no dependency on private Orlo packages.
+For development in this repository, build `@orlo/agent-sdk` with npm workspaces. The SDK has no dependency on private Orlo packages.
 
 ## Minimal usage
 
@@ -123,7 +129,7 @@ const runtime = createGenericRuntimeAdapter({ run });
 
 Changing a skill's published default does not change these pinned versions. Skill instructions grant no tool permissions. Run attribution records the versions the agent declared; the application is responsible for passing those instructions to its model.
 
-This package also provides `orlo-skills install --skill <id> --version <id> --project <directory>` for project-scoped Claude Code skills. Set `ORLO_API_URL`, `ORLO_ORG_ID`, and `ORLO_API_KEY` (`skills.read`). Add `--replace` to explicitly switch versions; the installer preserves older files and refuses to overwrite local skills. Run `orlo-skills --help` for installer options. On Windows, directory symlinks require Developer Mode or elevation. The console download includes this command. Source is available in this repository; npm publication is a separate release step.
+This package also provides `orlo-skills install --skill <id> --version <id> --project <directory>` for project-scoped Claude Code skills. Set `ORLO_API_URL`, `ORLO_ORG_ID`, and `ORLO_API_KEY` (`skills.read`). Add `--replace` to explicitly switch versions; the installer preserves older files and refuses to overwrite local skills. Run `orlo-skills --help` for installer options. On Windows, directory symlinks require Developer Mode or elevation. Both the npm package and the console download include this command. Source is available in this repository.
 
 ## Retrying after approval
 

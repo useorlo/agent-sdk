@@ -2,6 +2,8 @@
 
 The `Publish npm SDK` workflow builds and tests the exact version in `packages/typescript/package.json`, publishes with provenance, and checks installation from npm. It runs manually on `main`; it does not publish on pull requests or ordinary pushes. TypeScript and Python releases are independent.
 
+Version `0.0.1` was published on 14 October 2026 with provenance. [Anonymous registry installation and CLI verification passed](https://github.com/useorlo/agent-sdk/actions/runs/38599129445). A separate consumer check passed TypeScript imports and types, both CLI help commands, and `npm audit signatures` (one verified signature and one verified attestation). Trusted publishing configuration remains the next release setup step.
+
 ## First npm release
 
 1. Add a short-lived npm granular token as the repository Actions secret `NPM_TOKEN`. Allow package read/write (publish and stage) for the `@orlo` scope and enable bypass 2FA for automated publication. Organization-management permissions are not needed. Never commit the token or paste it in an issue.
