@@ -1,0 +1,66 @@
+# Publish a reviewed SDK version from main; the first release uses a repository secret.
+name: Publish npm SDK
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact package version to publish
+        required: true
+        type: string
+        default: '0.0.1'
+      authentication:
+        description: Use the bootstrap token only until npm trusted publishing is configured
+        required: true
+        type: choice
+        options: [trusted, bootstrap-token]
+        default: trusted
+permissions:
+  contents: read
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Check the requested release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          node -e "const p=require('./packages/typescript/package.json'); if(p.name!=='@orlo/agent-sdk'||p.version!==process.env.RELEASE_VERSION||p.private) throw new Error('Requested version does not match the public SDK package');"
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm pack --workspace=@orlo/agent-sdk --dry-run
+      - name: Publish with provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ inputs.authentication == 'bootstrap-token' && secrets.NPM_TOKEN || '' }}
+          RELEASE_AUTHENTICATION: ${{ inputs.authentication }}
+        run: |
+          if [ "$RELEASE_AUTHENTICATION" = "bootstrap-token" ] && [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo 'Add the NPM_TOKEN repository Actions secret before the first release.' >&2
+            exit 1
+          fi
+          npm publish --workspace=@orlo/agent-sdk --access public --provenance
+      - name: Verify installation from npm
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          verify_dir=$(mktemp -d)
+          cd "$verify_dir"
+          npm init -y
+          npm install --ignore-scripts "@orlo/agent-sdk@$RELEASE_VERSION"
+          node -e "const sdk=require('@orlo/agent-sdk'); if(typeof sdk.AgentSession!=='function') throw new Error('Missing AgentSession export');"
+          npx --no-install orlo-agent-check --help
+          npx --no-install orlo-skills --help
