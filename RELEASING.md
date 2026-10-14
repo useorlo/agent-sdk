@@ -2,7 +2,7 @@
 
 The `Publish npm SDK` workflow builds and tests the exact version in `packages/typescript/package.json`, publishes with provenance, and checks installation from npm. It runs manually on `main`; it does not publish on pull requests or ordinary pushes. TypeScript and Python releases are independent.
 
-Version `0.0.1` was published on 14 October 2026 with provenance. [Anonymous registry installation and CLI verification passed](https://github.com/useorlo/agent-sdk/actions/runs/38599129445). A separate consumer check passed TypeScript imports and types, both CLI help commands, and `npm audit signatures` (one verified signature and one verified attestation). Trusted publishing configuration remains the next release setup step.
+Version `0.0.2` and the Python 0.1.1 source archive were released on 14 October 2026. The [publication and verification workflow](https://github.com/useorlo/agent-sdk/actions/runs/38602847140) passed. Both downloaded archive attestations were verified with `gh attestation verify --repo useorlo/agent-sdk`. Trusted publishing configuration remains the next release setup step.
 
 ## First npm release
 

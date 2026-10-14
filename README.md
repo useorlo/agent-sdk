@@ -8,10 +8,10 @@ Connect tools in your application to Orlo. A wrapper asks Orlo for a decision be
 Install the TypeScript SDK from [npm](https://www.npmjs.com/package/@orlo/agent-sdk):
 
 ```sh
-npm install @orlo/agent-sdk@0.0.2
+npm install --save-exact @orlo/agent-sdk@0.0.2
 ```
 
-Start with **Connect your agent** in your Orlo console. Set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. The console also offers matching versioned downloads. Python is not yet published on PyPI; use its console download or build from source.
+Start with **Connect your agent** in your Orlo console. Set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. The console also offers matching versioned downloads. Python 0.1.1 is available as an attested archive in the [public release](https://github.com/useorlo/agent-sdk/releases/tag/v0.0.2). It is not yet on PyPI. The console supplies the matching archive and a hash-checked installation command.
 
 ## Development
 
@@ -39,12 +39,12 @@ The TypeScript function wrapper and Python LangChain/LangGraph integration are p
 
 SDK wrappers stop denied calls only when the application uses them around the actual implementation. Callbacks provide trace evidence; they do not prevent unwrapped tool execution. All tool actions stop by default when Orlo is unavailable. An application can explicitly allow an action class to continue, accepting the permission and reporting gap. Choose and document the outage behavior for your application.
 
-Shared skill retrieval grants no tool permission. Approval retries must use the original step ID and arguments. Finish each run so its background reports are delivered, and check the unsent-report count when delivery matters.
+Shared skill retrieval grants no tool permission. Approval retries must use the original step ID and arguments. Finish each run to flush pending reports, and inspect the unsent-report count. Retries are bounded and held in memory; there is no persistent replay queue, and delivery is not guaranteed.
 
 ## Releases and compatibility
 
-SDK changes are maintained here. TypeScript and Python have separate versions and release schedules. The private Orlo platform currently builds matching workspace copies for its console downloads; migration to pinned package releases follows registry publication. New optional API fields must remain backward compatible; breaking protocol changes require a versioned migration and matching server contract tests. Do not regenerate this checkout from the private monorepo after contributors start working here.
+SDK changes are maintained here. TypeScript and Python have separate versions and release schedules. Console builds pin verified public release archives and copy their bytes unchanged. They do not rebuild those downloads from private source. New optional API fields must remain backward compatible; breaking protocol changes require a versioned migration and matching server contract tests. Do not regenerate this checkout from the private monorepo after contributors start working here.
 
-TypeScript version `0.0.1` is published with provenance. The [registry verification](https://github.com/useorlo/agent-sdk/actions/runs/38599129445) installed it without a token and checked both commands. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
+TypeScript version `0.0.2` is published with provenance. The [release workflow](https://github.com/useorlo/agent-sdk/actions/runs/38602847140) verified anonymous npm installation and both CLI commands, tested the Python 0.1.1 archive, and published signed build attestations for both archives. See [release notes](RELEASE-NOTES.md) for the changed outage default and tool registries. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
 
 Apache-2.0. See [LICENSE](LICENSE).
