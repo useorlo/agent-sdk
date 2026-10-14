@@ -41,6 +41,7 @@ import {
 
 export { CircuitBreaker, OrloUnavailableError, type CircuitBreakerOptions } from './transport.js';
 export type * from './protocol.js';
+export { createToolRegistry, type RegisteredTool, type RegisteredToolCall, type ToolRegistration } from './tool-registry.js';
 export { verifySkillVersion } from './skills.js';
 export { installSkill } from './skill-installer.js';
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from typing import TypedDict
 from _support import SessionTestCase
-from orlo_langgraph import OrloGovernanceBlocked, govern_tool
+from orlo_langgraph import OrloGovernanceBlocked, govern_tool, GovernedToolRegistry, ToolDefinition
 
 try:
     from langgraph.graph import StateGraph, START, END
@@ -18,7 +18,7 @@ class State(TypedDict):
 
 @unittest.skipIf(StateGraph is None, "langgraph is not installed")
 class CompiledGraphTests(SessionTestCase):
-    async def run_graph(self, decision: str):
+    async def run_graph(self, decision: str, registered: bool = False):
         original = self.session.orlo_client.transport
         calls = []
 
@@ -30,13 +30,14 @@ class CompiledGraphTests(SessionTestCase):
 
         self.session.orlo_client.transport = transport
 
-        @govern_tool(session=self.session, tool_name='local_lookup', action_class='read', auto_request_approval=False)
         async def lookup():
             calls.append('executed')
             return 'found'
 
+        wrapped = GovernedToolRegistry(self.session, {'local_lookup': ToolDefinition(lookup, 'read')}, auto_request_approval=False).resolve('local_lookup') if registered else govern_tool(session=self.session, tool_name='local_lookup', action_class='read', auto_request_approval=False)(lookup)
+
         async def node(state: State):
-            return {'answer': await lookup()}
+            return {'answer': await wrapped()}
 
         graph = StateGraph(State)
         graph.add_node('lookup', node)
@@ -66,3 +67,9 @@ class CompiledGraphTests(SessionTestCase):
 
     async def test_approval_required_tool_in_compiled_graph(self):
         await self.run_graph('require_approval')
+
+    async def test_registered_tool_in_compiled_graph(self):
+        await self.run_graph('allow', registered=True)
+
+    async def test_registered_tool_is_blocked_in_compiled_graph(self):
+        await self.run_graph('reject', registered=True)

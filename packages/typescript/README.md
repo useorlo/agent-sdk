@@ -69,6 +69,22 @@ await callbacks.beforeModelCall({
 - No orchestration ownership
 - Semantic helpers over raw endpoint construction
 
+## Register the tools your agent can call
+
+Register implementations once and give the agent's dispatcher only this registry. Unknown names are rejected before contacting Orlo. Each registered call uses the same permission check, approval handling, and result reporting as the generic adapter.
+
+```ts
+import { createToolRegistry } from '@orlo/agent-sdk';
+
+const tools = createToolRegistry({ run, tools: {
+  lookup_order: { actionClass: 'read', execute: async (args: { orderId: string }) => lookupOrder(args.orderId) },
+} });
+const result = await tools.invoke('lookup_order', { orderId: '123' }, { stepId: 'lookup-123' });
+console.log(tools.describe()); // Registered names, action classes, and outage behavior.
+```
+
+The call keeps its argument and result types. Reuse the same step ID and arguments after approval. Register the tool's real action class; the SDK cannot infer it. Keep raw implementations out of the agent's tool list. This registry cannot intercept other call paths, arbitrary code, or tools exposed separately by the host. Its inventory describes configured tools, not verified coverage of the entire application.
+
 ## Generic runtime adapter
 
 The generic runtime adapter is the first thin veneer above the SDK. It wraps normal async model and tool functions, applies Orlo governance before and after execution, and throws a typed error if Orlo blocks the step.

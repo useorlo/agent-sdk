@@ -132,3 +132,19 @@ When a session starts, Orlo returns `blocking_step_types`. `govern_tool` and `Go
 Background reports use bounded retries in memory. There is no durable outbox or automatic replay after recovery. Closing or flushing waits for those attempts; it does not recover lost reports. Inspect `session.unsent_steps` before declaring evidence complete. Process termination can lose reports without leaving a count. If delivery must survive an outage or restart, the application needs its own persistent reporting mechanism.
 
 The default changed from allowing reads during an outage to stopping all tool calls. Existing applications that require the old behavior must opt in explicitly.
+
+## Register tools in one place
+
+```python
+from orlo_langgraph import GovernedToolRegistry, ToolDefinition
+
+registry = GovernedToolRegistry(session, {
+    "lookup_order": ToolDefinition(execute=lookup_order_impl, action_class="read"),
+})
+# Give these wrapped callables to your framework, never the raw implementations.
+tools = list(registry.tools.values())
+result = await registry.resolve("lookup_order")(order_id="123")
+print(registry.describe())  # Names, action classes, and outage behavior for this mapping.
+```
+
+Unknown names are rejected. The tool mapping cannot be edited after registration. Async and sync implementations retain their wrapper behavior; use `orlo_step_id` with the original arguments to resume after approval. The inventory describes registered tools only. Other execution paths, host-provided tools, and arbitrary code remain outside this boundary. Callback traces alone do not prevent execution.
