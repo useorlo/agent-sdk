@@ -40,7 +40,24 @@ class OrloLangGraphSession:
     _blocking_step_types: frozenset[str] | None = field(default=None, init=False)
     _pending: set[asyncio.Task] = field(default_factory=set, init=False)
 
+    @classmethod
+    async def resume(cls, orlo_client: OrloLangGraphClient, session_id: str, *, fail_mode: Mapping[str, str] | None = None) -> "OrloLangGraphSession":
+        """Reattach to an active or paused session without creating or reopening one."""
+        detail = await orlo_client.get_session(session_id)
+        session = detail.get("session", {})
+        if session.get("id") != session_id or session.get("status") not in {"active", "paused"} or not session.get("task_id"):
+            raise OrloSessionError("Only an active or paused Orlo session can be resumed")
+        resumed = cls(orlo_client=orlo_client, task_id=session["task_id"], fail_mode=fail_mode)
+        resumed.session = session
+        resumed.session_id = session_id
+        # No cached blocking-step contract is returned; wait on every step after a restart.
+        return resumed
+
     async def __aenter__(self) -> "OrloLangGraphSession":
+        if self._closed:
+            raise OrloSessionError("This Orlo session is closed")
+        if self.session_id:
+            return self
         result = await self.orlo_client.create_session(
             {
                 "task_id": self.task_id,

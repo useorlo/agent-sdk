@@ -48,3 +48,7 @@ SDK changes are maintained here. TypeScript and Python have separate versions an
 TypeScript version `0.0.2` is published with provenance. The [release workflow](https://github.com/useorlo/agent-sdk/actions/runs/38602847140) verified anonymous npm installation and both CLI commands, tested the Python 0.1.1 archive, and published signed build attestations for both archives. See [release notes](RELEASE-NOTES.md) for the changed outage default and tool registries. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+## Approval recovery
+
+The next SDK release adds bounded approval waits and reattachment to existing runs. See [Resume work after an approval](docs/approvals.md) for TypeScript and Python examples, cancellation, and durable recovery. These helpers are not in the current published archives.

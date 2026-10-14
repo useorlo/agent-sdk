@@ -35,3 +35,12 @@ class OrloGovernanceBlocked(RuntimeError):
 
 class OrloApprovalRequired(OrloGovernanceBlocked):
     """Raised when Orlo requires approval before a step can continue."""
+
+
+class OrloApprovalTimeoutError(OrloSessionError, TimeoutError):
+    """The local wait ended; it does not cancel or decide the approval."""
+
+    def __init__(self, approval_id: str, timeout_seconds: float) -> None:
+        self.approval_id = approval_id
+        self.timeout_seconds = timeout_seconds
+        super().__init__(f"Approval {approval_id} did not resolve within {timeout_seconds} seconds. Read its status before retrying the governed step.")

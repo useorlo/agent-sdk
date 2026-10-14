@@ -8,6 +8,8 @@
  * Also re-exports the generic runtime adapter from generic-runtime.ts.
  */
 import crypto from 'node:crypto';
+import { waitForApprovalDecision, validateApproval, type WaitForApprovalOptions } from './approvals.js';
+export { OrloApprovalTimeoutError, type WaitForApprovalOptions } from './approvals.js';
 import { taskSystemInstructions } from './skill-content.js';
 import { type SkillVersion } from './protocol.js';
 import { verifySkillVersion } from './skills.js';
@@ -145,11 +147,14 @@ export class OrloAgentClient {
     this.breaker = options.circuitBreaker === false ? null : new CircuitBreaker(options.circuitBreaker || {});
   }
 
-  private async fetchOnce(path: string, init: RequestInit, idempotencyKey: string | null): Promise<Response> {
+  private async fetchOnce(path: string, init: RequestInit, idempotencyKey: string | null): Promise<{ response: Response; payload: any }> {
+    init.signal?.throwIfAborted();
     const controller = new AbortController();
+    const abort = () => controller.abort(init.signal?.reason);
+    init.signal?.addEventListener('abort', abort, { once: true });
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      return await this.fetchImpl(joinUrl(this.baseUrl, path), {
+      const response = await this.fetchImpl(joinUrl(this.baseUrl, path), {
         ...init,
         signal: controller.signal,
         headers: {
@@ -160,8 +165,12 @@ export class OrloAgentClient {
           ...(init.headers || {}),
         },
       });
+      const payload = response.status === 204 ? undefined : response.ok ? await response.json() : await readErrorPayload(response);
+      controller.signal.throwIfAborted();
+      return { response, payload };
     } finally {
       clearTimeout(timer);
+      init.signal?.removeEventListener('abort', abort);
     }
   }
 
@@ -177,18 +186,21 @@ export class OrloAgentClient {
     let lastError: unknown = null;
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      init.signal?.throwIfAborted();
       if (this.breaker && !this.breaker.canRequest()) {
         throw new OrloUnavailableError('Orlo is unavailable after repeated failures; not calling it until the cooldown ends', lastError);
       }
 
       let response: Response;
+      let payload: any;
       try {
-        response = await this.fetchOnce(path, init, idempotencyKey);
+        ({ response, payload } = await this.fetchOnce(path, init, idempotencyKey));
       } catch (err) {
+        init.signal?.throwIfAborted();
         lastError = err;
         this.breaker?.recordFailure();
         if (attempt < attempts) {
-          await sleep(retryDelayMs(null, attempt, RETRY_BASE_DELAY_MS));
+          await sleep(retryDelayMs(null, attempt, RETRY_BASE_DELAY_MS), init.signal);
           continue;
         }
         throw new OrloUnavailableError(`Orlo could not be reached: ${describeError(err)}`, err);
@@ -199,16 +211,15 @@ export class OrloAgentClient {
         if (response.status === 204) {
           return undefined as T;
         }
-        return response.json() as Promise<T>;
+        return payload as T;
       }
 
-      const payload = await readErrorPayload(response);
       const stillRunning = response.status === 409 && payload?.error === 'IDEMPOTENCY_IN_PROGRESS';
       if (response.status >= 500 || stillRunning) {
         if (!stillRunning) this.breaker?.recordFailure();
         lastError = toApiError(response, payload);
         if (attempt < attempts) {
-          await sleep(retryDelayMs(response, attempt, RETRY_BASE_DELAY_MS));
+          await sleep(retryDelayMs(response, attempt, RETRY_BASE_DELAY_MS), init.signal);
           continue;
         }
         if (stillRunning) throw lastError;
@@ -221,6 +232,17 @@ export class OrloAgentClient {
     }
 
     throw new OrloUnavailableError('Orlo could not be reached', lastError);
+  }
+
+  /** Read current status after a webhook, reconnect, or process restart. Requires agent_governance.read. */
+  async getApproval(approvalId: string, options: { signal?: AbortSignal } = {}): Promise<AgentApproval> {
+    if (!approvalId.trim()) throw new TypeError('approvalId is required');
+    return validateApproval(await this.request(`/v1/agent-approvals/${encodeURIComponent(approvalId)}`, { signal: options.signal }), approvalId);
+  }
+
+  /** Wait for approved, rejected, or expired. Never executes a tool or changes an approval. */
+  async waitForApproval(approvalId: string, options: WaitForApprovalOptions = {}): Promise<AgentApproval> {
+    return waitForApprovalDecision((signal) => this.getApproval(approvalId, { signal }), approvalId, options);
   }
 
   async createSession(input: CreateAgentSessionRequest): Promise<CreateAgentSessionResult> {
@@ -428,6 +450,16 @@ export class OrloAgentRun {
   static async start(client: OrloAgentClient, input: StartAgentRunInput, options: AgentRunOptions = {}): Promise<OrloAgentRun> {
     const result = await client.createSession(input);
     return new OrloAgentRun(client, result.session, result.policy_cache_ttl_s, result.blocking_step_types, options);
+  }
+
+  /** Reattach to a saved active or paused run after a restart. Does not create or reopen a session. */
+  static async resume(client: OrloAgentClient, sessionId: string, options: AgentRunOptions = {}): Promise<OrloAgentRun> {
+    const { session } = await client.getSession(sessionId);
+    if (session.id !== sessionId || !['active', 'paused'].includes(session.status)) {
+      throw new Error('Only an active or paused Orlo session can be resumed');
+    }
+    // The detail endpoint has no cached blocking-step contract; conservatively wait on all steps.
+    return new OrloAgentRun(client, session, 0, undefined, options);
   }
 
   /** Load immutable content and record its identities before any agent work starts. */

@@ -4,7 +4,7 @@
 
 from .callbacks import OrloLangGraphCallbackHandler
 from .client import OrloLangGraphClient
-from .exceptions import OrloApprovalRequired, OrloGovernanceBlocked, OrloSessionError, OrloUnavailableError
+from .exceptions import OrloApprovalTimeoutError, OrloApprovalRequired, OrloGovernanceBlocked, OrloSessionError, OrloUnavailableError
 from .registry import GovernedToolRegistry, ToolDefinition
 from .session import OrloLangGraphSession
 from .wrappers import GovernedChatModel, create_governed_model, govern_tool
@@ -14,6 +14,7 @@ __all__ = [
     "ToolDefinition",
     "GovernedChatModel",
     "OrloApprovalRequired",
+    "OrloApprovalTimeoutError",
     "OrloGovernanceBlocked",
     "OrloLangGraphCallbackHandler",
     "OrloLangGraphClient",

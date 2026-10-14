@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 from urllib import error, request
+from urllib.parse import quote
 from uuid import uuid4
 
-from .exceptions import OrloSessionError, OrloUnavailableError
+from .exceptions import OrloApprovalTimeoutError, OrloSessionError, OrloUnavailableError
 
 
 JsonDict = dict[str, Any]
@@ -143,6 +145,9 @@ class OrloLangGraphClient:
     async def create_session(self, payload: JsonDict) -> Any:
         return await self._request("POST", "/v1/agent-sessions", payload)
 
+    async def get_session(self, session_id: str) -> JsonDict:
+        return await self._request("GET", f"/v1/agent-sessions/{quote(session_id, safe='')}")
+
     async def update_session_status(self, session_id: str, status: str) -> Any:
         return await self._request("PATCH", f"/v1/agent-sessions/{session_id}", {"status": status})
 
@@ -151,6 +156,41 @@ class OrloLangGraphClient:
 
     async def check_tool(self, session_id: str, payload: JsonDict) -> Any:
         return await self._request("POST", f"/v1/agent-sessions/{session_id}/tools/check", payload)
+
+    async def get_approval(self, approval_id: str) -> JsonDict:
+        """Read one approval after a webhook or restart. Requires agent_governance.read."""
+        if not approval_id.strip():
+            raise ValueError("approval_id is required")
+        result = await self._request("GET", f"/v1/agent-approvals/{quote(approval_id, safe='')}")
+        if not isinstance(result, dict) or result.get("id") != approval_id or result.get("status") not in {"pending", "approved", "rejected", "expired"}:
+            raise OrloSessionError("Orlo returned an invalid approval response")
+        return result
+
+    async def wait_for_approval(self, approval_id: str, *, timeout_seconds: float = 300.0, poll_interval_seconds: float = 2.0) -> JsonDict:
+        """Wait for a final status without executing a tool. Cancel the asyncio task to stop waiting.
+
+        Transient outages retry with backoff within the total timeout. HTTP reads already running
+        in urllib's worker thread may finish after cancellation, bounded by timeout_seconds on the client.
+        """
+        if not approval_id.strip() or not math.isfinite(timeout_seconds) or timeout_seconds <= 0 or not math.isfinite(poll_interval_seconds) or poll_interval_seconds <= 0:
+            raise ValueError("approval_id and positive, finite wait intervals are required")
+
+        async def poll() -> JsonDict:
+            failures = 0
+            while True:
+                try:
+                    approval = await self.get_approval(approval_id)
+                    if approval["status"] != "pending":
+                        return approval
+                    failures = 0
+                except OrloUnavailableError:
+                    failures = min(failures + 1, 4)
+                await asyncio.sleep(min(10.0, poll_interval_seconds * 2 ** failures) if failures else poll_interval_seconds)
+
+        try:
+            return await asyncio.wait_for(poll(), timeout=timeout_seconds)
+        except asyncio.TimeoutError as exc:
+            raise OrloApprovalTimeoutError(approval_id, timeout_seconds) from exc
 
     async def request_approval(self, session_id: str, step_id: str, payload: JsonDict) -> Any:
         return await self._request("POST", f"/v1/agent-sessions/{session_id}/steps/{step_id}/request-approval", payload)
