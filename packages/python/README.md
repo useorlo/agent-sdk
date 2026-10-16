@@ -171,3 +171,12 @@ await session.record_action_report(action_id, {
 Keep the report ID and original values in your application state when retrying delivery. The server records each ID once; changed content under the same ID returns a conflict. Later reports append history, including after the run ends. They never alter permission or erase previous reports.
 
 Automatic execution reports use the existing best-effort background queue. Flush before exit and inspect `session.unsent_steps`. Missing reports remain unknown, including fail-open calls without a saved action ID. A reporting failure does not replace a tool result or its error. For durable delivery, await the report receipt and use your application's persistent retry mechanism; do not rerun a tool just to resend its report.
+
+
+## Measured permission context (unreleased)
+
+When starting a run that should earn measured permission, set `metadata.permission_context` to `{ "model": "your-exact-model-revision", "runtime_version": "your-application-revision" }`. Declare shared skill versions through the existing `skill_versions` field. Keep those declarations accurate for the run; start a new run after changing the model, runtime, or skills. Orlo records these application declarations; it does not attest which external model your application called.
+
+A member defines the argument conditions, starts measurement, and explicitly enables a qualifying configuration in the console. Outside those conditions or that configuration, approval is required. A suspension applies to subsequent permission checks in existing runs. It cannot recall a tool call already authorized and dispatched. Only a signed-in member can resume a suspended band; ordinary one-call approvals remain separate.
+
+A governed action authorized by a measured band includes `policy_decision.permission_bands` with its permission revision, lifecycle revision, scope hash, and decision-time review bounds. These are judgments about permission, not proof that the tool ran or achieved its business outcome. Existing applications without measured bands retain their permission behavior.

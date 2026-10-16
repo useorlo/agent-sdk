@@ -166,6 +166,8 @@ export type AgentGovernanceDecision =
   | 'contain';
 
 export interface AgentPolicyDecisionArtifact {
+  /** Measured permissions that authorized this action at decision time. */
+  permission_bands?: Array<{policy_id:string;policy_version:number;band_epoch:number;scope_hash:string;agreement_lower:number;harm_upper:number}>;
   decision: AgentGovernanceDecision;
   reason_code: string | null;
   reason_summary: string | null;
