@@ -148,3 +148,26 @@ print(registry.describe())  # Names, action classes, and outage behavior for thi
 ```
 
 Unknown names are rejected. The tool mapping cannot be edited after registration. Async and sync implementations retain their wrapper behavior; use `orlo_step_id` with the original arguments to resume after approval. The inventory describes registered tools only. Other execution paths, host-provided tools, and arbitrary code remain outside this boundary. Callback traces alone do not prevent execution.
+
+
+## Execution and business reports (unreleased)
+
+These helpers require an Orlo server that returns `action_id` on governed steps. They are in the source tree; the currently published packages and console downloads do not include them yet.
+
+Opt in to execution reporting to record whether a wrapped tool succeeded, failed, or was not executed because permission was refused. A successful return says nothing about the later business result. Your application reports that result explicitly and names the criterion it assessed.
+
+```python
+@govern_tool(session, 'refund', action_class='write', report_execution=True)
+async def refund(order_id):
+    return await issue_refund(order_id)
+
+# With action_id from the governed tool request saved in your operation state:
+await session.record_action_report(action_id, {
+    'report_id': str(uuid4()), 'kind': 'business',
+    'criterion': 'Customer issue resolved', 'outcome': 'unknown',
+})
+```
+
+Keep the report ID and original values in your application state when retrying delivery. The server records each ID once; changed content under the same ID returns a conflict. Later reports append history, including after the run ends. They never alter permission or erase previous reports.
+
+Automatic execution reports use the existing best-effort background queue. Flush before exit and inspect `session.unsent_steps`. Missing reports remain unknown, including fail-open calls without a saved action ID. A reporting failure does not replace a tool result or its error. For durable delivery, await the report receipt and use your application's persistent retry mechanism; do not rerun a tool just to resend its report.

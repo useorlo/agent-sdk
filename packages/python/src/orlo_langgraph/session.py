@@ -148,6 +148,14 @@ class OrloLangGraphSession:
         """Import steps or events in the background, for example a call that ran while Orlo was unreachable."""
         self._track(self.orlo_client.import_trace(self.require_session_id(), dict(payload)))
 
+    async def record_action_report(self, action_id: str, payload: Mapping[str, Any]) -> Any:
+        """Record execution or a later business outcome and return its durable receipt."""
+        return await self.orlo_client.record_action_report(self.require_session_id(), action_id, dict(payload))
+
+    def report_action(self, action_id: str, payload: Mapping[str, Any]) -> None:
+        """Best-effort background reporting, tracked by flush and unsent_steps."""
+        self._track(self.record_action_report(action_id, payload))
+
     async def flush(self) -> None:
         """Wait for steps sent in the background. close() calls this first."""
         loop = asyncio.get_running_loop()

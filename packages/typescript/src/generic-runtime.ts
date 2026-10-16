@@ -5,6 +5,7 @@
  * when Orlo rejects, contains, or requires approval. index.ts re-exports this module as part of
  * @orlo/agent-sdk.
  */
+import crypto from 'node:crypto';
 import type {
   AgentApproval,
   AgentContainmentAction,
@@ -45,6 +46,8 @@ export class OrloGovernanceBlockedError extends Error {
 }
 
 export interface GenericRuntimeAdapterOptions {
+  /** Opt in to background execution reports. Business outcomes must be reported explicitly. */
+  reportExecution?: boolean;
   run: OrloAgentRun;
   autoRequestApproval?: boolean;
 }
@@ -185,9 +188,19 @@ export function createGenericRuntimeAdapter(options: GenericRuntimeAdapterOption
         metadata: input.metadata,
         autoRequestApproval: options.autoRequestApproval,
       });
+      const actionId = pre.governance.action_id;
+      if (options.reportExecution && !pre.failedOpen && !actionId) throw new Error('Execution reporting needs action_id support. Upgrade the Orlo server before enabling reportExecution.');
+      const report = (outcome: 'succeeded' | 'failed' | 'not_executed', durationMs?: number) => {
+        if (options.reportExecution && actionId) options.run.reportAction(actionId, { report_id: crypto.randomUUID(), kind: 'execution', outcome, ...(durationMs === undefined ? {} : { duration_ms: durationMs }) });
+      };
+      if (isBlockingDecision(pre.governance.decision)) report('not_executed');
       throwIfBlocked(pre.governance, input.stepId, pre.approval);
 
-      const output = await input.execute(input.arguments);
+      const started = performance.now();
+      let output: TResult;
+      try { output = await input.execute(input.arguments); }
+      catch (error) { report('failed', performance.now() - started); throw error; }
+      report('succeeded', performance.now() - started);
       const postRequest = {
         step_id: input.stepId,
         parent_step_id: input.parentStepId,

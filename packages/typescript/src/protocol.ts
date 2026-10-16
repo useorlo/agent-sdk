@@ -131,7 +131,9 @@ export interface GovernAgentStepRequest {
   parent_span_id?: string;
 }
 
+/** Identifies the saved observation; present on governed steps from servers supporting action reports. */
 export interface GovernAgentStepResponse {
+  action_id?: string;
   decision: AgentGovernanceDecision;
   reason: string | null;
   trace_id: string;
@@ -363,3 +365,10 @@ export type AgentCitationSourceType =
   | 'external_service';
 
 export type AgentStateChangeKind = 'none' | 'proposed' | 'observed' | 'confirmed';
+
+/** Optional application reports. Execution and a named business outcome have distinct meanings. */
+export type AgentActionReport = {
+  report_id: string; detail?: string; occurred_at?: string;
+} & ({kind:'execution';outcome:'succeeded'|'failed'|'not_executed'|'unknown';duration_ms?:number}
+  | {kind:'business';outcome:'met'|'not_met'|'unknown';criterion:string});
+export interface AgentActionReportReceipt {report_id:string;recorded_at:string;source:'application_report'}

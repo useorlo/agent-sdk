@@ -211,3 +211,28 @@ Repeated promotion of the same step returns `already_added: true` and the versio
 Background reports use bounded retries in memory. There is no durable outbox or automatic replay after recovery. Closing or flushing waits for those attempts; it does not recover lost reports. Inspect `run.unsentSteps` before declaring evidence complete. Process termination can lose reports without leaving a count. If delivery must survive an outage or restart, the application needs its own persistent reporting mechanism.
 
 The default changed from allowing reads during an outage to stopping all tool calls. Existing applications that require the old behavior must opt in explicitly.
+
+
+## Execution and business reports (unreleased)
+
+These helpers require an Orlo server that returns `action_id` on governed steps. They are in the source tree; the currently published packages and console downloads do not include them yet.
+
+Opt in to execution reporting to record whether a wrapped tool succeeded, failed, or was not executed because permission was refused. A successful return says nothing about the later business result. Your application reports that result explicitly and names the criterion it assessed.
+
+```ts
+const runtime = createGenericRuntimeAdapter({ run, reportExecution: true });
+const result = await runtime.runToolStep({
+  stepId: 'refund-123', toolName: 'refund', actionClass: 'write',
+  arguments: { orderId: '123' }, execute: refund,
+});
+// Persist this action ID with the application operation for later outcomes.
+const actionId = result.pre.governance.action_id!;
+await run.recordActionReport(actionId, {
+  report_id: crypto.randomUUID(), kind: 'business',
+  criterion: 'Customer issue resolved', outcome: 'unknown',
+});
+```
+
+Keep the report ID and original values in your application state when retrying delivery. The server records each ID once; changed content under the same ID returns a conflict. Later reports append history, including after the run ends. They never alter permission or erase previous reports.
+
+Automatic execution reports use the existing best-effort background queue. Flush before exit and inspect `run.unsentSteps`. Missing reports remain unknown, including fail-open calls without a saved action ID. A reporting failure does not replace a tool result or its error. For durable delivery, await the report receipt and use your application's persistent retry mechanism; do not rerun a tool just to resend its report.

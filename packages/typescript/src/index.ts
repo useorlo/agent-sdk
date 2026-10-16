@@ -15,6 +15,8 @@ import { type SkillVersion } from './protocol.js';
 import { verifySkillVersion } from './skills.js';
 import type {
   AgentActionClass,
+  AgentActionReport,
+  AgentActionReportReceipt,
   AgentApproval,
   AgentGovernanceDecision,
   AgentPolicyDecisionArtifact,
@@ -276,6 +278,12 @@ export class OrloAgentClient {
     });
   }
 
+  /** Await durable receipt. Reuse report_id when resending the same report after a restart. */
+  async recordActionReport(sessionId: string, actionId: string, report: AgentActionReport): Promise<AgentActionReportReceipt> {
+    if (!actionId?.trim()) throw new TypeError('Use the action_id returned by a governed tool request. Upgrade the Orlo server if it is absent.');
+    return this.request(`/v1/agent-sessions/${encodeURIComponent(sessionId)}/actions/${encodeURIComponent(actionId)}/reports`, { method: 'POST', body: JSON.stringify(report) });
+  }
+
   async checkTool(sessionId: string, input: ToolCheckRequest): Promise<ToolCheckResponse> {
     return this.request(`/v1/agent-sessions/${sessionId}/tools/check`, {
       method: 'POST',
@@ -506,6 +514,16 @@ export class OrloAgentRun {
   /** Sends a step without waiting for Orlo's answer. Orlo still records and checks it. */
   report(stepType: AgentStepType, input: Omit<GovernAgentStepRequest, 'step_type'>): void {
     this.track(this.client.governStep(this.sessionId, { ...input, step_type: stepType }));
+  }
+
+  /** Explicit reporting returns only after Orlo records it; delivery failures remain visible to the caller. */
+  async recordActionReport(actionId: string, report: AgentActionReport): Promise<AgentActionReportReceipt> {
+    return this.client.recordActionReport(this.sessionId, actionId, report);
+  }
+
+  /** Best-effort background reporting; flush() waits and unsentSteps includes failed reports. */
+  reportAction(actionId: string, report: AgentActionReport): void {
+    this.track(this.recordActionReport(actionId, report));
   }
 
   /** Waits for steps sent in the background. complete() calls this first. */

@@ -8,13 +8,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Awaitable, Callable, Mapping, TypeVar
 from uuid import uuid4
 
 from ._compat import current_run_id, is_runnable, to_jsonable
-from .exceptions import OrloApprovalRequired, OrloGovernanceBlocked, OrloUnavailableError
+from .exceptions import OrloApprovalRequired, OrloGovernanceBlocked, OrloUnavailableError, OrloSessionError
 from .session import OrloLangGraphSession
 
 
@@ -139,6 +140,7 @@ def govern_tool(
     environment: str | None = None,
     auto_request_approval: bool = True,
     metadata: Mapping[str, Any] | None = None,
+    report_execution: bool = False,
 ) -> Callable[[Callable[..., T]], Callable[..., Awaitable[T]] | Callable[..., T]]:
     """Govern every call of a tool with Orlo before and after it runs.
 
@@ -242,12 +244,31 @@ def govern_tool(
                         "request_payload": request_payload,
                     },
                 )
+            action_id = pre.get("action_id")
+            if report_execution and not failed_open and not action_id:
+                raise OrloSessionError("Execution reporting needs action_id support. Upgrade Orlo before enabling report_execution.")
+
+            def report(outcome: str, duration_ms: float | None = None) -> None:
+                if report_execution and action_id:
+                    payload = {"report_id": str(uuid4()), "kind": "execution", "outcome": outcome}
+                    if duration_ms is not None:
+                        payload["duration_ms"] = duration_ms
+                    self_session.report_action(action_id, payload)
+
+            if pre.get("decision") in {"reject", "contain", "require_approval"}:
+                report("not_executed")
             _raise_if_blocked(pre, approval, step_id=step_id)
 
-            if is_async:
-                result = await func(*args, **kwargs)
-            else:
-                result = await asyncio.to_thread(func, *args, **kwargs)
+            started = time.monotonic()
+            try:
+                if is_async:
+                    result = await func(*args, **kwargs)
+                else:
+                    result = await asyncio.to_thread(func, *args, **kwargs)
+            except Exception:
+                report("failed", (time.monotonic() - started) * 1000)
+                raise
+            report("succeeded", (time.monotonic() - started) * 1000)
 
             post_payload = {
                 "step_id": step_id,

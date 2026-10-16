@@ -151,6 +151,12 @@ class OrloLangGraphClient:
     async def update_session_status(self, session_id: str, status: str) -> Any:
         return await self._request("PATCH", f"/v1/agent-sessions/{session_id}", {"status": status})
 
+    async def record_action_report(self, session_id: str, action_id: str, payload: JsonDict) -> Any:
+        """Await a durable report receipt. Reuse report_id when retrying after a restart."""
+        if not action_id:
+            raise ValueError("Use action_id from a governed tool request; upgrade Orlo if it is absent")
+        return await self._request("POST", f"/v1/agent-sessions/{quote(session_id, safe='')}/actions/{quote(action_id, safe='')}/reports", payload)
+
     async def govern_step(self, session_id: str, payload: JsonDict) -> Any:
         return await self._request("POST", f"/v1/agent-sessions/{session_id}/steps/govern", payload)
 
