@@ -16,13 +16,17 @@ It wraps the raw HTTP API with:
 
 ## Install and check the connection
 
-Requires Node.js 20 or later. Install the published package:
+Requires Node.js 20 or later. Install the attested public release archive:
 
 ```sh
-npm install @orlo/agent-sdk@0.0.3
+gh release download v0.0.3 --repo useorlo/agent-sdk --pattern orlo-agent-sdk-0.0.3.tgz
+gh attestation verify orlo-agent-sdk-0.0.3.tgz --repo useorlo/agent-sdk
+npm install ./orlo-agent-sdk-0.0.3.tgz
 ```
 
 Open **Connect your agent → Run the connection check** in the Orlo console for your environment values and permissions. The console also offers a matching versioned SDK download; neither installation path needs an Orlo checkout.
+
+Registry publication of 0.0.3 is pending npm authorization. The current npm version, 0.0.2, predates resource permissions and complete-workflow testing. Use the verified archive for those features.
 
 Set `ORLO_API_URL` (gateway), `ORLO_ORG_ID`, `ORLO_TASK_ID`, `ORLO_CONSOLE_URL`, and `ORLO_API_KEY` using the values shown there. The key needs `agent_governance.run` and `agent_governance.read`.
 
