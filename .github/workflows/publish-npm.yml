@@ -7,7 +7,7 @@ on:
         description: Exact package version to publish
         required: true
         type: string
-        default: '0.0.2'
+        default: '0.0.3'
       verify_only:
         description: Verify an existing release without publishing again
         required: true

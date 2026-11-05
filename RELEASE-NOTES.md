@@ -1,4 +1,4 @@
-# Unreleased
+# Agent SDK 0.0.3 and Python adapter 0.1.2
 
 - Read one approval by ID and wait for an approved, rejected, or expired status in TypeScript and Python.
 - Bound waits by a total timeout, support cancellation, and retry transient outages with backoff.
@@ -6,6 +6,13 @@
 - Keep TypeScript transport timeouts active through response-body reads.
 
 Requires an Orlo API deployment with the exact approval-status endpoint. Decision webhooks are configured separately in Settings → Notifications. No waiter executes a tool; retry the original governed step after checking its decision.
+
+- Run complete-workflow trials with frozen assignments, bounded leases, lifecycle receipts and approval resumption.
+- TypeScript resource handlers receive immutable field, record, masking, destination and budget limits. Unsupported contracts stop before execution; explicit handler attestations distinguish applied limits from unknown results.
+- Supply signed person identity through a token callback. Unknown bootstrap identity and changed trust recover on later actions with bounded backoff; refused actions are never replayed automatically.
+- Resource operations fail closed during outages. Python can mark governed data tools resource-bound and refuses resource contracts; resource execution remains TypeScript-only.
+
+Upgrade the server before using these additive APIs. Existing tool-only integrations retain their public methods and closed outage default. Application idempotency, external data enforcement and durable recovery remain the application's responsibility.
 
 # Agent SDK 0.0.2 and Python adapter 0.1.1
 

@@ -19,7 +19,7 @@ It wraps the raw HTTP API with:
 Requires Node.js 20 or later. Install the published package:
 
 ```sh
-npm install @orlo/agent-sdk@0.0.2
+npm install @orlo/agent-sdk@0.0.3
 ```
 
 Open **Connect your agent → Run the connection check** in the Orlo console for your environment values and permissions. The console also offers a matching versioned SDK download; neither installation path needs an Orlo checkout.
@@ -33,6 +33,8 @@ npx --no-install orlo-agent-check --expect blocked
 The check wraps a harmless local tool named `orlo_setup_check`. It makes no model call and changes no permissions. Set that tool's permission explicitly in the console, then repeat with `--expect allowed`. Inherited restrictions still apply. The command prints links to the exact run and its verification page. Missing reports, a rejected key, an unreachable gateway, or an unexpected decision return a nonzero exit code. Every action stops if Orlo is unreachable.
 
 For development in this repository, build `@orlo/agent-sdk` with npm workspaces. The SDK has no dependency on private Orlo packages.
+
+Resource permissions add verified-person identity, immutable field/filter contracts, and registered data handlers. See [the integration guide](https://docs.useorlo.com/engineers/resource-permissions). Upgrade every executor before marking its tools resource-bound.
 
 ## Minimal usage
 
@@ -215,7 +217,7 @@ The default changed from allowing reads during an outage to stopping all tool ca
 
 ## Execution and business reports (unreleased)
 
-These helpers require an Orlo server that returns `action_id` on governed steps. They are in the source tree; the currently published packages and console downloads do not include them yet.
+These helpers require an Orlo server that returns `action_id` on governed steps. Use SDK 0.0.3 or later with the corresponding server update.
 
 Opt in to execution reporting to record whether a wrapped tool succeeded, failed, or was not executed because permission was refused. A successful return says nothing about the later business result. Your application reports that result explicitly and names the criterion it assessed.
 
@@ -245,3 +247,45 @@ When starting a run that should earn measured permission, set `metadata.permissi
 A member defines the argument conditions, starts measurement, and explicitly enables a qualifying configuration in the console. Outside those conditions or that configuration, approval is required. A suspension applies to subsequent permission checks in existing runs. It cannot recall a tool call already authorized and dispatched. Only a signed-in member can resume a suspended band; ordinary one-call approvals remain separate.
 
 A governed action authorized by a measured band includes `policy_decision.permission_bands` with its permission revision, lifecycle revision, scope hash, and decision-time review bounds. These are judgments about permission, not proof that the tool ran or achieved its business outcome. Existing applications without measured bands retain their permission behavior.
+
+## Multi-turn scenario trials (unreleased)
+
+`OrloScenarioRunner` runs a frozen scenario through your existing agent and tools. Orlo supplies a one-trial credential and records governance evidence, but it does not download or execute your application code.
+
+One scenario is one complete agent episode, not one tool call. `initial_state` resets the test system, interactions at `after_turn: 0` open the episode, later interactions enter after the named agent turn, and `tools` declares the surface your executor should expose. Your executor owns the model and agent loop, so it can take several turns and tool calls within `budgets`; the resulting steps become the trial trajectory. Verifiers run after that loop against independent evidence.
+
+```ts
+const runner = new OrloScenarioRunner(client);
+
+await runner.run(assignment, testEnvironment, async ({ run, scenario, signal }) => {
+  const result = await runMyAgent({ run, scenario, signal });
+  return {
+    status: 'completed',
+    metrics: { turns: result.turns, tool_calls: result.toolCalls, cost_usd: result.costUsd },
+  };
+});
+```
+
+The environment must prepare isolated state and clean it up. A failed cleanup makes the trial invalid. The executor must honor the abort signal so work stops at the declared deadline; JavaScript cannot forcibly stop application code that ignores cancellation. Budget excesses fail the trial.
+
+Implement `environment.verify(declarations, signal)` to read final state from the test system after the agent finishes. `evaluateAuthoritativeStateVerifier` applies the frozen JSON-pointer check and returns only the observed value needed for evidence. Orlo derives `permission_receipt` checks from its own governed steps, so the runner never supplies those results. Missing or contradictory mandatory evidence makes the trial invalid; a verified mismatch is a failed outcome.
+
+If an approval pauses the agent, return `awaiting_approval` with the approval ID and an opaque checkpoint reference. Persist the agent state in your own runtime, then call the runner again with that reference after Orlo reports an approved decision. Do not place checkpoint contents or secrets in the reference.
+
+Lifecycle receipts are idempotent. If `ScenarioTrialDeliveryError` is raised, persist its `receipt` and redeliver it with `recordScenarioTrialReceipt`; do not rerun a tool or the whole scenario just to resend evidence. `runScenarioTrials` provides bounded local concurrency and retains the result or error for every assignment.
+
+## Qualified production configurations (unreleased)
+
+A passed confirmatory comparison can qualify one complete configuration. A person adopts it in the task's Changes area; the test does not change production on its own. When the task requires qualified agent configurations, start each production run with the qualification ID and the exact manifest returned by Orlo:
+
+```ts
+const run = await OrloAgentRun.start(client, {
+  task_id,
+  qualified_configuration: {
+    qualification_id: qualification.id,
+    manifest: qualification.manifest,
+  },
+});
+```
+
+Orlo checks this binding once when the run starts and records it with the run. A changed artifact, model setting, task version, skill, source set, tool schema, or permission specification needs new evidence. The artifact identity is an external declaration unless your build integration supplies verified provenance. Qualification never grants permission: current rules, revocations, approvals, and containment continue to apply to each action.

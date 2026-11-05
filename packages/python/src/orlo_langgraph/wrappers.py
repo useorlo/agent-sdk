@@ -141,8 +141,14 @@ def govern_tool(
     auto_request_approval: bool = True,
     metadata: Mapping[str, Any] | None = None,
     report_execution: bool = False,
+    resource_bound: bool = False,
 ) -> Callable[[Callable[..., T]], Callable[..., Awaitable[T]] | Callable[..., T]]:
     """Govern every call of a tool with Orlo before and after it runs.
+
+    Set ``resource_bound`` for a tool that reads governed data. It then stops
+    whenever Orlo can't be reached, whatever the session's ``fail_mode`` says.
+    A tool Orlo has already answered with a resource contract or verified
+    identity in this session stops the same way.
 
     When a policy requires approval, the wrapper opens one (unless
     ``auto_request_approval`` is false) and raises ``OrloApprovalRequired``. The
@@ -206,7 +212,8 @@ def govern_tool(
             try:
                 pre = await self_session.govern_step(pre_payload)
             except OrloUnavailableError as exc:
-                if self_session.fail_mode_for(action_class) != "open":
+                # Governed data never runs on a guess: without Orlo there are no limits to apply.
+                if resource_bound or self_session.is_data_governed(tool_name) or self_session.fail_mode_for(action_class) != "open":
                     raise
                 # Explicit fail-open: reporting has bounded retries, not a persistent replay queue.
                 failed_open = True
@@ -235,6 +242,8 @@ def govern_tool(
                         ],
                     }
                 )
+            if not failed_open:
+                self_session.remember_data_governed(tool_name, pre)
             approval = None
             if not failed_open and pre.get("decision") == "require_approval" and auto_request_approval:
                 approval = await self_session.request_approval(
@@ -258,6 +267,9 @@ def govern_tool(
             if pre.get("decision") in {"reject", "contain", "require_approval"}:
                 report("not_executed")
             _raise_if_blocked(pre, approval, step_id=step_id)
+
+            if pre.get("resource_contract") is not None:
+                raise OrloSessionError("This integration cannot apply resource access limits. Use a resource-aware executor before running this tool.")
 
             started = time.monotonic()
             try:

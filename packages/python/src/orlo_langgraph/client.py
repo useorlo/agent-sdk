@@ -67,11 +67,12 @@ class OrloLangGraphClient:
         if self._failures >= self.failure_threshold:
             self._open_until = time.monotonic() + self.cooldown_seconds
 
-    async def _request(self, method: str, path: str, payload: JsonDict | None = None) -> Any:
+    async def _request(self, method: str, path: str, payload: JsonDict | None = None, extra_headers: Mapping[str, str] | None = None) -> Any:
         headers = {
             "Content-Type": "application/json",
             "X-Orlo-Org-Id": self.org_id,
             **self.headers,
+            **(extra_headers or {}),
         }
         if method not in {"GET", "HEAD"}:
             headers["Idempotency-Key"] = uuid4().hex
@@ -144,6 +145,19 @@ class OrloLangGraphClient:
 
     async def create_session(self, payload: JsonDict) -> Any:
         return await self._request("POST", "/v1/agent-sessions", payload)
+
+    async def record_scenario_trial_receipt(self, trial_id: str, execution_token: str, payload: JsonDict) -> Any:
+        """Deliver one idempotent lifecycle receipt for a test-scoped trial."""
+        return await self._request("POST", f"/v1/scenario-trials/{quote(trial_id, safe='')}/receipt", payload, {"X-Orlo-Scenario-Token": execution_token})
+
+    async def resume_scenario_trial(self, trial_id: str, execution_token: str) -> Any:
+        """Resume only after Orlo confirms that the bound approval was granted."""
+        return await self._request("POST", f"/v1/scenario-trials/{quote(trial_id, safe='')}/resume", None, {"X-Orlo-Scenario-Token": execution_token})
+
+    async def claim_scenario_trial(self, comparison_id: str, runner_id: str, lease_seconds: int = 120) -> Any:
+        """Claim one bounded unit; its one-trial credential is returned only in this response."""
+        return await self._request("POST", f"/v1/scenario-comparisons/{quote(comparison_id, safe='')}/trials/claim",
+            {"runner_id": runner_id, "lease_seconds": lease_seconds})
 
     async def get_session(self, session_id: str) -> JsonDict:
         return await self._request("GET", f"/v1/agent-sessions/{quote(session_id, safe='')}")

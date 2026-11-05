@@ -3,9 +3,10 @@ import { createGenericRuntimeAdapter, type GenericRuntimeAdapterOptions } from '
 import type { AgentActionClass } from './protocol.js';
 
 export interface RegisteredTool<TArgs = any, TResult = any> {
+  resource?: {resolve:(args:TArgs)=>import('./resource-permissions.js').ResourceRequest;supportedLimitTypes:string[]};
   actionClass: AgentActionClass;
   environment?: string;
-  execute: (args: TArgs) => Promise<TResult>;
+  execute: (args: TArgs, contract?: Readonly<import('./resource-permissions.js').ResourceContract>, limits?: import('./generic-runtime.js').LimitAttestation) => Promise<TResult>;
 }
 export interface RegisteredToolCall {
   /** Reuse this ID and the same arguments when resuming an approved call. */
@@ -35,7 +36,7 @@ export function createToolRegistry<T extends Record<string, RegisteredTool>>(
   return Object.freeze({
     describe(): ToolRegistration[] {
       return [...tools].map(([name, tool]) => ({ name, actionClass: tool.actionClass,
-        whenUnavailable: options.run.failModeFor(tool.actionClass) === 'open' ? 'continue' : 'stop' }));
+        whenUnavailable: !tool.resource && options.run.failModeFor(tool.actionClass) === 'open' ? 'continue' : 'stop' }));
     },
     async invoke<K extends Extract<keyof T, string>>(
       name: K, args: Parameters<T[K]['execute']>[0], call: RegisteredToolCall,
@@ -46,6 +47,7 @@ export function createToolRegistry<T extends Record<string, RegisteredTool>>(
       const result = await runtime.runToolStep({
         stepId: call.stepId, toolName: name, actionClass: tool.actionClass, environment: tool.environment,
         parentStepId: call.parentStepId, arguments: args, execute: tool.execute,
+        resource:tool.resource?.resolve(args),supportedLimitTypes:tool.resource?.supportedLimitTypes,
         metadata: { ...call.metadata, orlo_tool_registration: 'registry' },
       });
       return result.output;

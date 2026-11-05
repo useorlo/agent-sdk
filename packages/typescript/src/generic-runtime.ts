@@ -6,6 +6,7 @@
  * @orlo/agent-sdk.
  */
 import crypto from 'node:crypto';
+import {parseAccessLimits,parseResourceRequest,combineAccessLimits} from './resource-permissions.js';
 import type {
   AgentApproval,
   AgentContainmentAction,
@@ -61,7 +62,16 @@ export interface GovernedModelStepInput<TOutput = Record<string, unknown>> {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Handed to a resource handler with its contract. Call `applied()` once the handler has enforced every
+ * limit, or `applied([...types])` for the ones it enforced. Without it the SDK reports the outcome as unknown,
+ * because only the handler knows whether the limits took effect.
+ */
+export interface LimitAttestation {applied(limitTypes?: string[]): void}
+
 export interface GovernedToolStepInput<TArgs = Record<string, unknown>, TResult = Record<string, unknown>> {
+  resource?: import('./resource-permissions.js').ResourceRequest;
+  supportedLimitTypes?: string[];
   /**
    * Reuse the blocked step's id, with the same arguments, to retry after a reviewer decides its
    * approval: Orlo allows the call once, rejects it if the approval was rejected, and asks for a
@@ -70,7 +80,7 @@ export interface GovernedToolStepInput<TArgs = Record<string, unknown>, TResult 
   stepId: string;
   toolName: string;
   arguments: TArgs;
-  execute: (args: TArgs) => Promise<TResult>;
+  execute: (args: TArgs, contract?: Readonly<import('./resource-permissions.js').ResourceContract>, limits?: LimitAttestation) => Promise<TResult>;
   actionClass?: GovernAgentStepRequest['action_class'];
   environment?: string;
   parentStepId?: string;
@@ -183,6 +193,7 @@ export function createGenericRuntimeAdapter(options: GenericRuntimeAdapterOption
         arguments: (input.arguments || {}) as Record<string, unknown>,
         action_class: input.actionClass,
         environment: input.environment,
+        resource:input.resource,
         parent_step_id: input.parentStepId,
         model_name: input.modelName,
         metadata: input.metadata,
@@ -190,26 +201,52 @@ export function createGenericRuntimeAdapter(options: GenericRuntimeAdapterOption
       });
       const actionId = pre.governance.action_id;
       if (options.reportExecution && !pre.failedOpen && !actionId) throw new Error('Execution reporting needs action_id support. Upgrade the Orlo server before enabling reportExecution.');
-      const report = (outcome: 'succeeded' | 'failed' | 'not_executed', durationMs?: number) => {
-        if (options.reportExecution && actionId) options.run.reportAction(actionId, { report_id: crypto.randomUUID(), kind: 'execution', outcome, ...(durationMs === undefined ? {} : { duration_ms: durationMs }) });
+      const attested=new Set<string>();
+      const report = (outcome: 'succeeded' | 'failed' | 'not_executed', durationMs?: number,limitStatus?:'unsupported') => {
+        const resource=pre.governance.resource_contract;
+        const types=resource?Object.keys(resource.access_limits):[];
+        // Success alone is not proof the limits took effect; only the handler's attestation is.
+        const all=types.length>0&&types.every(t=>attested.has(t));
+        const status=limitStatus??(outcome==='failed'?'failed':outcome==='succeeded'&&all?'applied':'unknown');
+        const partial=outcome==='succeeded'&&!all&&attested.size?{applied_limit_types:types.filter(t=>attested.has(t))}:{};
+        if ((options.reportExecution||input.resource) && actionId) options.run.reportAction(actionId, { report_id: crypto.randomUUID(), kind: 'execution', outcome, ...(durationMs === undefined ? {} : { duration_ms: durationMs }),
+          ...(resource?{resource_access:{authorization_hash:resource.authorization_hash,status,limit_types:types,...partial}}:{}) });
       };
       if (isBlockingDecision(pre.governance.decision)) report('not_executed');
       throwIfBlocked(pre.governance, input.stepId, pre.approval);
 
+      const contract=pre.governance.resource_contract;
+      if(input.resource||contract){
+        if(!input.resource||!contract||contract.version!==1||!contract.authorization_hash||contract.resource.resource_type!==input.resource.resource_type||contract.resource.operation!==input.resource.operation||contract.resource.resource_id!==input.resource.resource_id)
+          throw new Error('RESOURCE_CONTRACT_UNAVAILABLE: this tool requires a matching resource permission contract.');
+        try {
+          parseResourceRequest(contract.resource);
+          combineAccessLimits([parseAccessLimits(contract.access_limits)]);
+          if(!/^[a-f0-9]{64}$/.test(contract.authorization_hash)||!Array.isArray(contract.policy_versions)||!contract.policy_versions.length
+            ||contract.policy_versions.some(p=>typeof p.id!=='string'||!Number.isSafeInteger(p.version)||p.version<1))throw new Error();
+        } catch {throw new Error('RESOURCE_CONTRACT_UNAVAILABLE: this tool requires a valid resource permission contract.');}
+        const limits=Object.entries(contract.access_limits).filter(([,v])=>!Array.isArray(v)||v.length>0).map(([key])=>key);
+        if(limits.some(key=>!input.supportedLimitTypes?.includes(key))){report('not_executed',undefined,'unsupported');throw new Error('RESOURCE_LIMIT_UNSUPPORTED: the handler cannot apply every access limit.');}
+        const freeze=(value:any):any=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};
+        freeze(contract);
+      }
+
       const started = performance.now();
       let output: TResult;
-      try { output = await input.execute(input.arguments); }
+      const limits:LimitAttestation={applied:(types)=>{const known=contract?Object.keys(contract.access_limits):[];for(const t of types??known)if(known.includes(t))attested.add(t);}};
+      try { output = await input.execute(input.arguments,contract,limits); }
       catch (error) { report('failed', performance.now() - started); throw error; }
       report('succeeded', performance.now() - started);
       const postRequest = {
+        resource:input.resource,
         step_id: input.stepId,
         parent_step_id: input.parentStepId,
         tool_name: input.toolName,
         model_name: input.modelName,
         action_class: input.actionClass,
         environment: input.environment,
-        input: (input.arguments || {}) as Record<string, unknown>,
-        output: asGovernedOutput(output, input.modelName || input.toolName),
+        input: (input.resource?{resource_access:true}:input.arguments || {}) as Record<string, unknown>,
+        output: asGovernedOutput(input.resource?{resource_result:true}:output, input.modelName || input.toolName),
         metadata: input.metadata,
       };
       let post: GovernAgentStepResponse | null = null;

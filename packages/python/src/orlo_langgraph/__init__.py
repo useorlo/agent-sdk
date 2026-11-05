@@ -7,6 +7,7 @@ from .client import OrloLangGraphClient
 from .exceptions import OrloApprovalTimeoutError, OrloApprovalRequired, OrloGovernanceBlocked, OrloSessionError, OrloUnavailableError
 from .registry import GovernedToolRegistry, ToolDefinition
 from .session import OrloLangGraphSession
+from .scenario import OrloScenarioRunner, ScenarioExecutionContext, ScenarioResume, ScenarioTrialAssignment, ScenarioTrialDeliveryError, evaluate_authoritative_state_verifier, run_scenario_trials
 from .wrappers import GovernedChatModel, create_governed_model, govern_tool
 
 __all__ = [
@@ -20,7 +21,14 @@ __all__ = [
     "OrloLangGraphClient",
     "OrloLangGraphSession",
     "OrloSessionError",
+    "OrloScenarioRunner",
     "OrloUnavailableError",
+    "ScenarioExecutionContext",
+    "ScenarioResume",
+    "ScenarioTrialAssignment",
+    "ScenarioTrialDeliveryError",
     "create_governed_model",
+    "evaluate_authoritative_state_verifier",
     "govern_tool",
+    "run_scenario_trials",
 ]

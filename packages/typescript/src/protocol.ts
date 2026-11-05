@@ -62,6 +62,10 @@ export type AgentContainmentAction =
 export interface AgentSession {
   skill_versions?: AgentSkillVersion[];
   id: string;
+  activity_kind: 'production' | 'scenario_test';
+  scenario_trial_id: string | null;
+  scenario_qualification_id?: string | null;
+  scenario_configuration_hash?: string | null;
   task_id: string;
   external_run_id: string | null;
   goal: string | null;
@@ -91,6 +95,8 @@ export type AgentSessionStatus =
   | 'timed_out';
 
 export interface GovernAgentStepRequest {
+  resource?: import('./resource-permissions.js').ResourceRequest;
+  identity_token?: string;
   step_id: string;
   parent_step_id?: string;
   step_type: AgentStepType;
@@ -133,6 +139,8 @@ export interface GovernAgentStepRequest {
 
 /** Identifies the saved observation; present on governed steps from servers supporting action reports. */
 export interface GovernAgentStepResponse {
+  resource_identity?: {source:'authentication_verified'|'unknown';provider?:string;claim_names:string[];reason?:string;detail?:string;retryable?:boolean;unavailable_claims?:string[]};
+  resource_contract?: import('./resource-permissions.js').ResourceContract;
   action_id?: string;
   decision: AgentGovernanceDecision;
   reason: string | null;
@@ -249,6 +257,7 @@ export interface AgentTraceSample {
 }
 
 export interface CreateAgentSessionRequest {
+  identity_token?: string;
   skill_versions?: SkillVersionReference[];
   task_id: string;
   external_run_id?: string;
@@ -258,6 +267,28 @@ export interface CreateAgentSessionRequest {
   risk_tier?: AgentRiskTier;
   autonomy_level?: AgentAutonomyLevel;
   metadata?: Record<string, unknown>;
+  /** Bind this production run to the exact configuration adopted in Orlo. */
+  qualified_configuration?: QualifiedScenarioConfiguration;
+  test_context?: { kind: 'scenario_trial'; trial_id: string; execution_token: string };
+}
+
+/** The complete external-agent configuration frozen by a scenario comparison. */
+export interface ScenarioCandidateManifest {
+  version: 1;
+  key: string;
+  artifact: { name:string; version:string; digest:string; identity_assurance:'declared'|'verified' };
+  runtime: { name:string; version:string };
+  model: { provider:string; requested_model_id:string; settings_hash:string };
+  task_version_id: string;
+  skill_version_ids: string[];
+  source_set_version_id: string|null;
+  tool_schema_hash: string;
+  permission_specification_hash: string;
+}
+
+export interface QualifiedScenarioConfiguration {
+  qualification_id: string;
+  manifest: ScenarioCandidateManifest;
 }
 
 export interface CreateTraceSampleRequest {
@@ -277,6 +308,7 @@ export interface TraceSampleAnnotationRequest {
 }
 
 export interface ToolCheckRequest {
+  resource?: import('./resource-permissions.js').ResourceRequest;
   step_id: string;
   tool_name: string;
   arguments?: Record<string, unknown>;
@@ -371,6 +403,6 @@ export type AgentStateChangeKind = 'none' | 'proposed' | 'observed' | 'confirmed
 /** Optional application reports. Execution and a named business outcome have distinct meanings. */
 export type AgentActionReport = {
   report_id: string; detail?: string; occurred_at?: string;
-} & ({kind:'execution';outcome:'succeeded'|'failed'|'not_executed'|'unknown';duration_ms?:number}
+} & ({kind:'execution';outcome:'succeeded'|'failed'|'not_executed'|'unknown';duration_ms?:number;resource_access?:{authorization_hash:string;status:'applied'|'unsupported'|'failed'|'unknown';limit_types:string[];applied_limit_types?:string[]}}
   | {kind:'business';outcome:'met'|'not_met'|'unknown';criterion:string});
 export interface AgentActionReportReceipt {report_id:string;recorded_at:string;source:'application_report'}

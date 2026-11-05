@@ -45,11 +45,15 @@ import {
 
 export { CircuitBreaker, OrloUnavailableError, type CircuitBreakerOptions } from './transport.js';
 export type * from './protocol.js';
+export type {ResourceContract,ResourceRequest,AccessLimits} from './resource-permissions.js';
 export { createToolRegistry, type RegisteredTool, type RegisteredToolCall, type ToolRegistration } from './tool-registry.js';
 export { verifySkillVersion } from './skills.js';
 export { installSkill } from './skill-installer.js';
+export * from './scenario-runner.js';
 
 export interface OrloAgentClientOptions {
+  /** Application-supplied signed user token; the SDK does not refresh the identity-provider session. */
+  identityTokenProvider?: () => Promise<string | undefined>;
   baseUrl: string;
   orgId: string;
   headers?: Record<string, string>;
@@ -63,6 +67,7 @@ export interface OrloAgentClientOptions {
 }
 
 export interface CreateAgentSessionResult {
+  resource_identity?: {source:'authentication_verified'|'unknown';provider?:string;claim_names:string[];reason?:string;detail?:string;retryable?:boolean;unavailable_claims?:string[]};
   session: AgentSession;
   policy_cache_ttl_s: number;
   /** Step types the SDK must wait on. Servers that predate this field treat every step as blocking. */
@@ -131,6 +136,8 @@ function toApiError(response: Response, payload: any): OrloApiError {
 }
 
 export class OrloAgentClient {
+  private readonly identityTokenProvider?: () => Promise<string | undefined>;
+  private readonly identityTimes = new Map<string,{iat:number;exp:number;failures:number;retryAt:number}>();
   private readonly baseUrl: string;
   private readonly orgId: string;
   private readonly headers: Record<string, string>;
@@ -140,6 +147,7 @@ export class OrloAgentClient {
   private readonly breaker: CircuitBreaker | null;
 
   constructor(options: OrloAgentClientOptions) {
+    this.identityTokenProvider=options.identityTokenProvider;
     this.baseUrl = options.baseUrl;
     this.orgId = options.orgId;
     this.headers = options.headers || {};
@@ -248,9 +256,33 @@ export class OrloAgentClient {
   }
 
   async createSession(input: CreateAgentSessionRequest): Promise<CreateAgentSessionResult> {
-    return this.request('/v1/agent-sessions', {
+    const token=input.identity_token??await this.identityTokenProvider?.();
+    const result=await this.request<CreateAgentSessionResult>('/v1/agent-sessions', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({...input,...(token?{identity_token:token}:{})}),
+    });
+    this.rememberIdentity(result.session.id,token,result.resource_identity);
+    return result;
+  }
+
+  /** Deliver one idempotent lifecycle receipt for a test-scoped scenario trial. */
+  async recordScenarioTrialReceipt(trialId: string, executionToken: string, receipt: import('./scenario-runner.js').ScenarioTrialReceipt) {
+    return this.request<{trial_id:string;status:string;receipt_id:string;recorded:boolean;scenario_assessment?:Record<string,unknown>|null}>(`/v1/scenario-trials/${encodeURIComponent(trialId)}/receipt`, {
+      method: 'POST', headers: { 'X-Orlo-Scenario-Token': executionToken }, body: JSON.stringify(receipt),
+    });
+  }
+
+  /** Resume only after Orlo confirms the bound approval was granted. */
+  async resumeScenarioTrial(trialId: string, executionToken: string) {
+    return this.request<{trial_id:string;session_id:string;status:'running';checkpoint_reference:string|null}>(`/v1/scenario-trials/${encodeURIComponent(trialId)}/resume`, {
+      method: 'POST', headers: { 'X-Orlo-Scenario-Token': executionToken },
+    });
+  }
+
+  /** Claim one bounded unit of a frozen comparison; the returned credential is shown once. */
+  async claimScenarioTrial(comparisonId:string, runnerId:string, leaseSeconds=120) {
+    return this.request<{assignment:import('./scenario-runner.js').ScenarioTrialAssignment|null;comparison_status:string;retry_after_ms:number|null}>(`/v1/scenario-comparisons/${encodeURIComponent(comparisonId)}/trials/claim`,{
+      method:'POST',body:JSON.stringify({runner_id:runnerId,lease_seconds:leaseSeconds}),
     });
   }
 
@@ -272,10 +304,37 @@ export class OrloAgentClient {
   }
 
   async governStep(sessionId: string, input: GovernAgentStepRequest): Promise<GovernAgentStepResponse> {
-    return this.request(`/v1/agent-sessions/${sessionId}/steps/govern`, {
+    let token=input.identity_token;
+    const times=this.identityTimes.get(sessionId);
+    if(token===undefined&&this.identityTokenProvider&&(!times||times.retryAt<=Date.now()&&times.exp<Date.now()/1000+300)){
+      const candidate=await this.identityTokenProvider();
+      if(candidate){const claims=this.identityTokenTimes(candidate);if(!times||claims.iat>times.iat)token=candidate;}
+    }
+    const result=await this.request<GovernAgentStepResponse>(`/v1/agent-sessions/${sessionId}/steps/govern`, {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({...input,...(token?{identity_token:token}:{})}),
     });
+    this.rememberIdentity(sessionId,token,result.resource_identity);
+    return result;
+  }
+  // Unverified timestamps only schedule refresh. The engine authenticates every presented token.
+  private identityTokenTimes(token:string):{iat:number;exp:number}{try{const p=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString());return {iat:Number(p.iat)||0,exp:Number(p.exp)||0};}catch{return {iat:0,exp:0};}}
+  private rememberIdentity(session:string,token:string|undefined,summary?:GovernAgentStepResponse['resource_identity']){
+    const prior=this.identityTimes.get(session);
+    if(summary?.source==='unknown'){
+      // Never use timestamps from a refused token to suppress recovery. Retry once on the next action,
+      // then back off repeated failures without replaying the action or retaining token text.
+      if(!token&&prior?.failures)return;
+      const failures=(prior?.failures??0)+1;
+      this.setIdentityTimes(session,{iat:0,exp:0,failures,retryAt:failures===1?0:Date.now()+Math.min(30000,1000*2**Math.min(failures-2,5))});
+    }else if(token){
+      // An absent summary supports older servers; an explicit unknown summary always takes precedence.
+      this.setIdentityTimes(session,{...this.identityTokenTimes(token),failures:0,retryAt:0});
+    }
+  }
+  private setIdentityTimes(session:string,value:{iat:number;exp:number;failures:number;retryAt:number}){
+    if(!this.identityTimes.has(session)&&this.identityTimes.size>=1024)this.identityTimes.delete(this.identityTimes.keys().next().value!);
+    this.identityTimes.set(session,value);
   }
 
   /** Await durable receipt. Reuse report_id when resending the same report after a restart. */
@@ -580,6 +639,7 @@ export class OrloAgentRun {
       action_class: toolCheck.action_class,
       environment: toolCheck.environment,
       input: toolCheck.arguments,
+      resource:toolCheck.resource,
       metadata: input.metadata,
     };
 
@@ -587,7 +647,7 @@ export class OrloAgentRun {
     try {
       governance = await this.governToolRequest(request);
     } catch (err) {
-      if (!(err instanceof OrloUnavailableError) || this.failModeFor(toolCheck.action_class) !== 'open') {
+      if (toolCheck.resource || !(err instanceof OrloUnavailableError) || this.failModeFor(toolCheck.action_class) !== 'open') {
         throw err;
       }
       // Explicit fail-open: attempt reporting with bounded retries; there is no persistent replay queue.
@@ -619,6 +679,7 @@ export class OrloAgentRun {
         request_payload: {
           tool_name: toolCheck.tool_name,
           arguments: toolCheck.arguments || {},
+          ...(governance.resource_contract?{resource_contract:governance.resource_contract}:{}),
           action_class: toolCheck.action_class || null,
           environment: toolCheck.environment || null,
         },

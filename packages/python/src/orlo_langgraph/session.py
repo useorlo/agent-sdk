@@ -26,6 +26,8 @@ class OrloLangGraphSession:
     risk_tier: str | None = None
     autonomy_level: str = "assisted"
     metadata: Mapping[str, Any] | None = None
+    qualified_configuration: Mapping[str, Any] | None = None
+    test_context: Mapping[str, Any] | None = None
     # What a tool call does when Orlo can't be reached: "open" runs it and attempts background reporting, "closed"
     # blocks it. Keyed by action class, with "default" for the rest. Merged over DEFAULT_FAIL_MODE.
     fail_mode: Mapping[str, str] | None = None
@@ -39,6 +41,8 @@ class OrloLangGraphSession:
     _tool_runs: dict[str, str | None] = field(default_factory=dict, init=False)
     _blocking_step_types: frozenset[str] | None = field(default=None, init=False)
     _pending: set[asyncio.Task] = field(default_factory=set, init=False)
+    # Tools Orlo has governed with a resource contract or verified identity in this session. They never fail open.
+    _data_governed_tools: set[str] = field(default_factory=set, init=False)
 
     @classmethod
     async def resume(cls, orlo_client: OrloLangGraphClient, session_id: str, *, fail_mode: Mapping[str, str] | None = None) -> "OrloLangGraphSession":
@@ -66,6 +70,8 @@ class OrloLangGraphSession:
                 "risk_tier": self.risk_tier,
                 "autonomy_level": self.autonomy_level,
                 "metadata": dict(self.metadata or {}),
+                **({"qualified_configuration": dict(self.qualified_configuration)} if self.qualified_configuration else {}),
+                **({"test_context": dict(self.test_context)} if self.test_context else {}),
             }
         )
         self.session = result.get("session")
@@ -124,6 +130,13 @@ class OrloLangGraphSession:
     def is_blocking(self, step_type: str) -> bool:
         """Whether the wrapper must wait for Orlo's answer. Servers that don't say treat every step as blocking."""
         return self._blocking_step_types is None or step_type in self._blocking_step_types
+
+    def remember_data_governed(self, tool_name: str, response: Mapping[str, Any]) -> None:
+        if response.get("resource_contract") is not None or response.get("resource_identity") is not None:
+            self._data_governed_tools.add(tool_name)
+
+    def is_data_governed(self, tool_name: str) -> bool:
+        return tool_name in self._data_governed_tools
 
     def fail_mode_for(self, action_class: str | None) -> str:
         modes = {**DEFAULT_FAIL_MODE, **(self.fail_mode or {})}

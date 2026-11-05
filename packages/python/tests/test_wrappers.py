@@ -7,7 +7,7 @@ from __future__ import annotations
 import unittest
 from uuid import uuid4
 
-from orlo_langgraph.exceptions import OrloApprovalRequired
+from orlo_langgraph.exceptions import OrloApprovalRequired, OrloSessionError
 from orlo_langgraph.wrappers import govern_tool
 
 
@@ -29,6 +29,12 @@ class _FakeSession:
     # Every step blocks, as with a server that doesn't send blocking_step_types.
     def is_blocking(self, step_type: str) -> bool:
         return True
+
+    def remember_data_governed(self, tool_name: str, response) -> None:
+        pass
+
+    def is_data_governed(self, tool_name: str) -> bool:
+        return False
 
     def fail_mode_for(self, action_class: str | None) -> str:
         return "closed"
@@ -84,6 +90,21 @@ class _ApprovedOnRetrySession(_FakeSession):
 
 
 class GovernToolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_resource_contract_refuses_execution_in_this_integration(self):
+        class ResourceSession(_FakeSession):
+            async def govern_step(self, payload):
+                return {"decision": "allow", "resource_contract": {"version": 1}, "trace_id": "trace"}
+
+        invoked = []
+
+        @govern_tool(session=ResourceSession(), tool_name="read_profile", action_class="read")
+        async def read_profile():
+            invoked.append(True)
+
+        with self.assertRaises(OrloSessionError):
+            await read_profile()
+        self.assertEqual(invoked, [])
+
     async def test_govern_tool_requests_approval_and_raises(self):
         session = _FakeSession()
 

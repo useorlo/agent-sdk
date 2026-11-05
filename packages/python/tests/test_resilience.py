@@ -22,6 +22,7 @@ class ScriptedTransport:
         self.blocking_step_types = blocking_step_types
         self.down = False
         self.failures_left = 0
+        self.govern_extra: dict = {}
 
     def __call__(self, method: str, url: str, headers: dict, payload: dict | None):
         self.requests.append((method, url, dict(headers), payload))
@@ -36,7 +37,7 @@ class ScriptedTransport:
             self.failures_left -= 1
             raise TimeoutError("timed out")
         if url.endswith("/steps/govern"):
-            return {"decision": "allow", "reason": None, "containment": None, "trace_id": "trace-1"}
+            return {"decision": "allow", "reason": None, "containment": None, "trace_id": "trace-1", **self.govern_extra}
         return {}
 
     def calls_to(self, suffix: str) -> list[tuple[str, str, dict, dict | None]]:
@@ -142,6 +143,39 @@ class WrapperResilienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(session.is_blocking("model_call"))
         self.assertEqual(session.fail_mode_for("read"), "closed")
         self.assertEqual(session.fail_mode_for("delete"), "closed")
+
+
+    async def test_a_resource_bound_read_stops_during_an_outage_even_when_reads_fail_open(self):
+        transport = ScriptedTransport()
+        session = await self.start(transport, {"read": "open"})
+        ran: list[str] = []
+
+        @govern_tool(session=session, tool_name="read_profile", action_class="read", resource_bound=True)
+        async def read_profile(customer_id: str) -> str:
+            ran.append(customer_id)
+            return customer_id
+
+        transport.down = True
+        with self.assertRaises(OrloUnavailableError):
+            await read_profile("c-1")
+        self.assertEqual(ran, [])
+
+    async def test_a_tool_orlo_governed_with_identity_stops_during_a_later_outage(self):
+        transport = ScriptedTransport()
+        session = await self.start(transport, {"read": "open"})
+        ran: list[str] = []
+
+        @govern_tool(session=session, tool_name="lookup_case", action_class="read")
+        async def lookup_case(case_id: str) -> str:
+            ran.append(case_id)
+            return case_id
+
+        transport.govern_extra = {"resource_identity": {"source": "authentication_verified", "claim_names": []}}
+        self.assertEqual(await lookup_case("first"), "first")
+        transport.down = True
+        with self.assertRaises(OrloUnavailableError):
+            await lookup_case("second")
+        self.assertEqual(ran, ["first"])
 
 
 class SyncToolTests(unittest.TestCase):

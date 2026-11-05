@@ -8,10 +8,10 @@ Connect tools in your application to Orlo. A wrapper asks Orlo for a decision be
 Install the TypeScript SDK from [npm](https://www.npmjs.com/package/@orlo/agent-sdk):
 
 ```sh
-npm install --save-exact @orlo/agent-sdk@0.0.2
+npm install --save-exact @orlo/agent-sdk@0.0.3
 ```
 
-Start with **Connect your agent** in your Orlo console. Set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. The console also offers matching versioned downloads. Python 0.1.1 is available as an attested archive in the [public release](https://github.com/useorlo/agent-sdk/releases/tag/v0.0.2). It is not yet on PyPI. The console supplies the matching archive and a hash-checked installation command.
+Start with **Connect your agent** in your Orlo console. Set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. The console also offers matching versioned downloads. Python 0.1.2 is available as an attested archive in the [public release](https://github.com/useorlo/agent-sdk/releases/tag/v0.0.3). It is not yet on PyPI. The console supplies the matching archive and a hash-checked installation command.
 
 ## Development
 
@@ -45,10 +45,14 @@ Shared skill retrieval grants no tool permission. Approval retries must use the 
 
 SDK changes are maintained here. TypeScript and Python have separate versions and release schedules. Console builds pin verified public release archives and copy their bytes unchanged. They do not rebuild those downloads from private source. New optional API fields must remain backward compatible; breaking protocol changes require a versioned migration and matching server contract tests. Do not regenerate this checkout from the private monorepo after contributors start working here.
 
-TypeScript version `0.0.2` is published with provenance. The [release workflow](https://github.com/useorlo/agent-sdk/actions/runs/38602847140) verified anonymous npm installation and both CLI commands, tested the Python 0.1.1 archive, and published signed build attestations for both archives. See [release notes](RELEASE-NOTES.md) for the changed outage default and tool registries. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
+TypeScript version `0.0.2` is published with provenance. The [release workflow](https://github.com/useorlo/agent-sdk/actions/runs/38602847140) verified anonymous npm installation and both CLI commands, tested the Python 0.1.2 archive, and published signed build attestations for both archives. See [release notes](RELEASE-NOTES.md) for the changed outage default and tool registries. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
 
 Apache-2.0. See [LICENSE](LICENSE).
 
 ## Approval recovery
 
-The next SDK release adds bounded approval waits and reattachment to existing runs. See [Resume work after an approval](docs/approvals.md) for TypeScript and Python examples, cancellation, and durable recovery. These helpers are not in the current published archives.
+SDK 0.0.3 and Python 0.1.2 include bounded approval waits and reattachment to existing runs. See [Resume work after an approval](docs/approvals.md) for TypeScript and Python examples, cancellation, and durable recovery. No waiter executes a tool; retry the exact governed action after approval.
+
+## Resource permissions and complete workflows
+
+TypeScript can pass a verified person token, register a resource handler, and apply the exact field, record and destination limits returned by Orlo. The handler must implement the limits and explicitly report which took effect. Unknown contracts, unsupported limits and outages stop resource operations. Python wrappers stop on resource contracts and do not implement these limits. Both SDKs support complete-workflow trial receipts; the application still supplies the runner, fixture and independent verifiers.

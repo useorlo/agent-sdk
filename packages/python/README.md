@@ -118,7 +118,7 @@ On that retry Orlo:
 
 `OrloLangGraphClient` gives each attempt `timeout_seconds` (default 3.0) and retries once (`retries`, default 1) after a timeout, a network error, or a 5xx. Every write carries an `Idempotency-Key` that stays the same across its retries, so the API replays its first answer instead of recording the step twice. After `failure_threshold` consecutive failures (default 5) the client stops calling Orlo for `cooldown_seconds` (default 30) and raises `OrloUnavailableError`, a subclass of `OrloSessionError`.
 
-When a tool check can't reach Orlo, the session's `fail_mode` for that action class decides. The default is `{"default": "closed"}`: every tool action stops. To deliberately allow reads during an outage, set `fail_mode={"read": "open", "default": "closed"}`. A read can disclose sensitive data; its action class is supplied by your application.
+When a tool check can't reach Orlo, the session's `fail_mode` for that action class decides. The default is `{"default": "closed"}`: every tool action stops. To deliberately allow reads during an outage, set `fail_mode={"read": "open", "default": "closed"}`. A read can disclose sensitive data; its action class is supplied by your application. Tools that read governed data always stop during an outage: mark them with `govern_tool(..., resource_bound=True)`, and any tool Orlo has answered with a resource contract or verified identity earlier in the session is treated the same way.
 
 - `"open"`: the tool runs, and background reporting is attempted with `metadata.fail_open`. Delivery is not guaranteed.
 - `"closed"`: `OrloUnavailableError` is raised and the tool doesn't run.
@@ -152,7 +152,7 @@ Unknown names are rejected. The tool mapping cannot be edited after registration
 
 ## Execution and business reports (unreleased)
 
-These helpers require an Orlo server that returns `action_id` on governed steps. They are in the source tree; the currently published packages and console downloads do not include them yet.
+These helpers require an Orlo server that returns `action_id` on governed steps. Use the 0.1.2 archive or later with the corresponding server update. Python refuses resource contracts; use the TypeScript resource executor for field and record limits.
 
 Opt in to execution reporting to record whether a wrapped tool succeeded, failed, or was not executed because permission was refused. A successful return says nothing about the later business result. Your application reports that result explicitly and names the criterion it assessed.
 
@@ -180,3 +180,46 @@ When starting a run that should earn measured permission, set `metadata.permissi
 A member defines the argument conditions, starts measurement, and explicitly enables a qualifying configuration in the console. Outside those conditions or that configuration, approval is required. A suspension applies to subsequent permission checks in existing runs. It cannot recall a tool call already authorized and dispatched. Only a signed-in member can resume a suspended band; ordinary one-call approvals remain separate.
 
 A governed action authorized by a measured band includes `policy_decision.permission_bands` with its permission revision, lifecycle revision, scope hash, and decision-time review bounds. These are judgments about permission, not proof that the tool ran or achieved its business outcome. Existing applications without measured bands retain their permission behavior.
+
+## Multi-turn scenario trials (unreleased)
+
+`OrloScenarioRunner` runs a frozen scenario through your existing agent and tools. Orlo supplies a one-trial credential and records governance evidence, but it does not download or execute your application code.
+
+```python
+runner = OrloScenarioRunner(client)
+
+async def execute(context):
+    result = await run_my_agent(context.session, context.scenario)
+    return {
+        "status": "completed",
+        "metrics": {"turns": result.turns, "tool_calls": result.tool_calls, "cost_usd": result.cost_usd},
+    }
+
+await runner.run(assignment, test_environment, execute)
+```
+
+The environment must prepare isolated state and clean it up. A failed cleanup makes the trial invalid. The executor must respond to task cancellation so work stops at the declared deadline; Python cannot safely terminate arbitrary application code that suppresses cancellation. Budget excesses fail the trial.
+
+Implement `environment.verify(declarations)` to read final state from the test system after the agent finishes. `evaluate_authoritative_state_verifier` applies the frozen JSON-pointer check and returns only the observed value needed for evidence. Orlo derives `permission_receipt` checks from its own governed steps, so the runner never supplies those results. Missing or contradictory mandatory evidence makes the trial invalid; a verified mismatch is a failed outcome.
+
+If an approval pauses the agent, return `awaiting_approval` with the approval ID and an opaque checkpoint reference. Persist the agent state in your own runtime, then call the runner again with `ScenarioResume` after Orlo reports an approved decision. Do not place checkpoint contents or secrets in the reference.
+
+Lifecycle receipts are idempotent. If `ScenarioTrialDeliveryError` is raised, persist its `receipt` and redeliver it with `record_scenario_trial_receipt`; do not rerun a tool or the whole scenario just to resend evidence. `run_scenario_trials` provides bounded local concurrency and retains the result or error for every assignment.
+
+## Qualified production configurations (unreleased)
+
+A passed confirmatory comparison can qualify one complete configuration. A person adopts it in the task's Changes area; the test does not change production on its own. If the task requires qualified configurations, provide the qualification ID and the exact manifest when the production session starts:
+
+```python
+async with OrloLangGraphSession(
+    orlo_client=client,
+    task_id=task_id,
+    qualified_configuration={
+        "qualification_id": qualification["id"],
+        "manifest": qualification["manifest"],
+    },
+) as session:
+    await run_agent(session)
+```
+
+Orlo checks the binding once and records it with the run. Changing the artifact, model settings, task version, shared skills, source set, tool schemas, or permission specification needs new evidence. Qualification does not grant permission; current rules, revocations, approvals, and containment still apply to each action.
