@@ -58,7 +58,13 @@ jobs:
             echo 'Add the NPM_TOKEN repository Actions secret before the first release.' >&2
             exit 1
           fi
-          npm publish --workspace=@orlo/agent-sdk --access public --provenance
+          if [ "$RELEASE_AUTHENTICATION" = "trusted" ]; then
+            # An empty legacy authToken entry suppresses npm's OIDC exchange.
+            unset NODE_AUTH_TOKEN
+            NPM_CONFIG_USERCONFIG=/dev/null npm publish --workspace=@orlo/agent-sdk --registry=https://registry.npmjs.org --access public --provenance
+          else
+            npm publish --workspace=@orlo/agent-sdk --access public --provenance
+          fi
       - name: Verify installation from npm
         timeout-minutes: 20
         env:

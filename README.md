@@ -45,7 +45,7 @@ Shared skill retrieval grants no tool permission. Approval retries must use the 
 
 SDK changes are maintained here. TypeScript and Python have separate versions and release schedules. Console builds pin verified public release archives and copy their bytes unchanged. They do not rebuild those downloads from private source. New optional API fields must remain backward compatible; breaking protocol changes require a versioned migration and matching server contract tests. Do not regenerate this checkout from the private monorepo after contributors start working here.
 
-TypeScript version `0.0.2` is published with provenance. The [release workflow](https://github.com/useorlo/agent-sdk/actions/runs/38602847140) verified anonymous npm installation and both CLI commands, tested the Python 0.1.2 archive, and published signed build attestations for both archives. See [release notes](RELEASE-NOTES.md) for the changed outage default and tool registries. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
+Published releases carry npm provenance. The release workflow verifies anonymous installation and both CLI commands, tests the Python archive, and publishes build attestations for both archives. See [release notes](RELEASE-NOTES.md) for the changed outage default and tool registries. Compatibility CI builds and tests; publication uses the separate manual workflow described in [RELEASING.md](RELEASING.md).
 
 Apache-2.0. See [LICENSE](LICENSE).
 
