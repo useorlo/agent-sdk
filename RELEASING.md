@@ -29,3 +29,5 @@ If the archive job fails after npm publication, rerun only that failed job; do n
 The same workflow can release attested archives with `archive_only: true`. It builds and tests the public source, verifies a clean TypeScript archive installation and both CLIs, tests the Python archive, and attests both assets. This mode does not publish or claim installation from npm. Console downloads may pin these public archive bytes after attestation verification.
 
 When registry access returns, publish the already released TypeScript archive with provenance rather than replacing the GitHub asset or silently changing the console download. Verify registry installation separately. If any SDK source or archive content changes, release a new version.
+
+To publish an archive-only release to npm later, set `existing_archive: true`, `archive_only: false`, and the existing version. The workflow verifies the release attestation and package identity, then publishes those exact bytes with provenance. It does not rebuild or replace the existing release assets.

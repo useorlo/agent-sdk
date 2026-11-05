@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: false
+      existing_archive:
+        description: Publish the existing attested release archive unchanged
+        required: true
+        type: boolean
+        default: false
       archive_only:
         description: Release attested archives without publishing to npm
         required: true
@@ -58,17 +63,29 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ inputs.authentication == 'bootstrap-token' && secrets.NPM_TOKEN || '' }}
           RELEASE_AUTHENTICATION: ${{ inputs.authentication }}
+          EXISTING_ARCHIVE: ${{ inputs.existing_archive }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$RELEASE_AUTHENTICATION" = "bootstrap-token" ] && [ -z "$NODE_AUTH_TOKEN" ]; then
             echo 'Add the NPM_TOKEN repository Actions secret before the first release.' >&2
             exit 1
           fi
+          if [ "$EXISTING_ARCHIVE" = "true" ]; then
+            mkdir existing-release
+            gh release download "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --pattern "orlo-agent-sdk-$RELEASE_VERSION.tgz" --dir existing-release
+            gh attestation verify "existing-release/orlo-agent-sdk-$RELEASE_VERSION.tgz" --repo "$GITHUB_REPOSITORY"
+            tar -xOf "existing-release/orlo-agent-sdk-$RELEASE_VERSION.tgz" package/package.json | node -e "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const p=JSON.parse(s);if(p.name!=='@orlo/agent-sdk'||p.version!==process.env.RELEASE_VERSION||p.private)throw new Error('Release package mismatch');});"
+            set -- "existing-release/orlo-agent-sdk-$RELEASE_VERSION.tgz"
+          else
+            set -- --workspace=@orlo/agent-sdk
+          fi
           if [ "$RELEASE_AUTHENTICATION" = "trusted" ]; then
             # An empty legacy authToken entry suppresses npm's OIDC exchange.
             unset NODE_AUTH_TOKEN
-            NPM_CONFIG_USERCONFIG=/dev/null npm publish --workspace=@orlo/agent-sdk --registry=https://registry.npmjs.org --access public --provenance
+            NPM_CONFIG_USERCONFIG=/dev/null npm publish "$@" --registry=https://registry.npmjs.org --access public --provenance
           else
-            npm publish --workspace=@orlo/agent-sdk --access public --provenance
+            npm publish "$@" --access public --provenance
           fi
       - name: Verify installation from npm
         timeout-minutes: 20
@@ -99,7 +116,7 @@ jobs:
           npx --no-install orlo-skills --help
   release-artifacts:
     needs: publish
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && !inputs.verify_only && (needs.publish.result == 'success' || inputs.archive_only) }}
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && !inputs.verify_only && !inputs.existing_archive && (needs.publish.result == 'success' || inputs.archive_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
