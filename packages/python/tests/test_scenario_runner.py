@@ -57,6 +57,22 @@ class ScenarioRunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "invalid")
         self.assertEqual(transport.requests[-1][3]["failure"]["cleanup"], "fixture dirty")
 
+    async def test_deadline_cancels_execution_and_still_records_cleanup(self):
+        transport = Transport()
+        runner = OrloScenarioRunner(OrloLangGraphClient("https://orlo.test", "org-1", transport=transport))
+        assignment = self.assignment()
+        assignment.scenario["budgets"]["max_duration_ms"] = 30
+        cancelled = asyncio.Event()
+        async def execute(context):
+            try:
+                await asyncio.sleep(10)
+            finally:
+                cancelled.set()
+        result = await runner.run(assignment, Environment(), execute)
+        self.assertEqual(result["status"], "failed")
+        self.assertTrue(cancelled.is_set())
+        self.assertEqual(transport.requests[-1][3]["cleanup"]["status"], "succeeded")
+
     async def test_batch_concurrency_is_bounded(self):
         active = 0
         maximum = 0
