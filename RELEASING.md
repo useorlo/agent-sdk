@@ -23,3 +23,9 @@ See [npm publication scanning](https://github.blog/changelog/2026-07-28-npm-publ
 After npm installation verification passes, the workflow packages the Python source from the same public commit, installs and tests that archive, and creates a GitHub release with both archives and SHA-256 checksums. GitHub attestations bind the archives to this public workflow. The TypeScript archive is fetched from npm unchanged. Python is not published to PyPI by this job. Action dependencies are pinned to commit SHAs.
 
 If the archive job fails after npm publication, rerun only that failed job; do not republish npm. Console builds must pin the verified archive URLs and hashes and copy their bytes unchanged. They must not generate a different archive under the same release version.
+
+## Registry authorization outage
+
+The same workflow can release attested archives with `archive_only: true`. It builds and tests the public source, verifies a clean TypeScript archive installation and both CLIs, tests the Python archive, and attests both assets. This mode does not publish or claim installation from npm. Console downloads may pin these public archive bytes after attestation verification.
+
+When registry access returns, publish the already released TypeScript archive with provenance rather than replacing the GitHub asset or silently changing the console download. Verify registry installation separately. If any SDK source or archive content changes, release a new version.
