@@ -8,10 +8,10 @@ Connect tools in your application to Orlo. A wrapper asks Orlo for a decision be
 Install the TypeScript SDK from [npm](https://www.npmjs.com/package/@orlo/agent-sdk):
 
 ```sh
-npm install --save-exact @orlo/agent-sdk@0.0.2
+npm install --save-exact @orlo/agent-sdk@0.0.3
 ```
 
-The latest resource and complete-workflow support is in the attested 0.0.3 archives on the [release page](https://github.com/useorlo/agent-sdk/releases/tag/v0.0.3). npm publication of 0.0.3 is pending registry authorization. For those features, use the matching console download or verify and install the release archive.
+The latest resource and complete-workflow support is in npm 0.0.3 and the matching attested archives on the [release page](https://github.com/useorlo/agent-sdk/releases/tag/v0.0.3). Console downloads use those same verified archive bytes.
 
 Start with **Connect your agent** in your Orlo console. Set the environment values, run the harmless connection check, and open its exact result. No model-provider key is required for the check. The console also offers matching versioned downloads. Python 0.1.2 is available as an attested archive in the [public release](https://github.com/useorlo/agent-sdk/releases/tag/v0.0.3). It is not yet on PyPI. The console supplies the matching archive and a hash-checked installation command.
 

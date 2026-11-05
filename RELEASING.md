@@ -31,3 +31,7 @@ The same workflow can release attested archives with `archive_only: true`. It bu
 When registry access returns, publish the already released TypeScript archive with provenance rather than replacing the GitHub asset or silently changing the console download. Verify registry installation separately. If any SDK source or archive content changes, release a new version.
 
 To publish an archive-only release to npm later, set `existing_archive: true`, `archive_only: false`, and the existing version. The workflow verifies the release attestation and package identity, then publishes those exact bytes with provenance. It does not rebuild or replace the existing release assets.
+
+## Release 0.0.3 verification
+
+TypeScript 0.0.3 and Python 0.1.2 are published as attested GitHub archives from commit `30af1eba1b87a68774d8055b60f319043739d4c2`. [The registry publication](https://github.com/useorlo/agent-sdk/actions/runs/41970442437) reused that exact TypeScript archive, published with provenance and verified anonymous npm installation and both CLI commands. No release asset was replaced.
