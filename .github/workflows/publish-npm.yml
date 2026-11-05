@@ -76,7 +76,7 @@ jobs:
             gh release download "v$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --pattern "orlo-agent-sdk-$RELEASE_VERSION.tgz" --dir existing-release
             gh attestation verify "existing-release/orlo-agent-sdk-$RELEASE_VERSION.tgz" --repo "$GITHUB_REPOSITORY"
             tar -xOf "existing-release/orlo-agent-sdk-$RELEASE_VERSION.tgz" package/package.json | node -e "let s='';process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>{const p=JSON.parse(s);if(p.name!=='@orlo/agent-sdk'||p.version!==process.env.RELEASE_VERSION||p.private)throw new Error('Release package mismatch');});"
-            set -- "existing-release/orlo-agent-sdk-$RELEASE_VERSION.tgz"
+            set -- "./existing-release/orlo-agent-sdk-$RELEASE_VERSION.tgz"
           else
             set -- --workspace=@orlo/agent-sdk
           fi
